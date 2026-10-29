@@ -1,0 +1,30 @@
+# ROS 2 / Colcon Build-Artefakte
+/build/
+/install/
+/log/
+/logs/
+
+# IDEs und Editor-Konfigurationen
+/.vscode/
+/.idea/
+*.swp
+*.swo
+*~
+
+# Python (falls Python-Nodes oder -Pakete genutzt werden)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.tox/
+dist/
+build/
+*.egg-info/
+
+# CMake-spezifische Dateien (falls lokal generiert außerhalb von build/)
+CMakeCache.txt
+CMakeFiles/
+cmake-install.cmake
+Makefile
+*.cmake
