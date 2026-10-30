@@ -63,7 +63,8 @@ private:
 
   bool sleep;  // turns plane on or off because starting and killing plane nodes sucks!
   // plane data
-  std::string flight_number;  // node name must be unique!, flight_number does not matter until now...
+  std::string icao_hex;
+  std::string flight_number;
   float lat;
   float lon;
   float alt;
@@ -76,7 +77,7 @@ private:
     lon += 0.01;
 
     auto message = tcas_sim::msg::Pose();
-    message.node_name = this->get_name();
+    message.icao_hex = icao_hex;
     message.flight_number = flight_number;
     message.latitude = lat;
     message.longitude = lon;
@@ -86,7 +87,7 @@ private:
 
   void broadcast_callback(const tcas_sim::msg::Pose::SharedPtr msg) {
     // self-echo filter
-    if (msg->node_name == this->get_name()) {
+    if (msg->icao_hex == icao_hex) {
       return; 
     }
 
@@ -102,7 +103,7 @@ private:
     }
 
     // if we reach here, other plane is within our radar range
-    RCLCPP_INFO(this->get_logger(), "--> detected neighbor [%s] at distance %.4f",  msg->node_name.c_str(), distance);
+    //RCLCPP_INFO(this->get_logger(), "--> detected neighbor [%s] at distance %.4f",  msg->icao_hex.c_str(), distance);
   }
 
   void adsb_callback(const interfaces::msg::Adsb::SharedPtr msg) {

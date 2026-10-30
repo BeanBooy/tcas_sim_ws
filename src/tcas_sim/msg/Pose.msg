@@ -1,4 +1,4 @@
-string node_name
+string icao_hex
 
 string flight_number
 float32 latitude
