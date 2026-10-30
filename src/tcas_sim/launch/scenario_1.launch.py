@@ -1,0 +1,38 @@
+from launch import LaunchDescription
+from launch_ros.actions import Node
+
+def generate_launch_description():
+    ld = LaunchDescription()
+
+    skyManager = Node(
+            package='tcas_sim',
+            executable='sky_manager',
+            #name=f'plane_{counter}',
+            output='screen',
+            parameters=[{
+                'data_stream': 'live'  # or 'live'
+            }]
+        )
+    ld.add_action(skyManager)
+
+    scenario_planes = [
+        {'id': 'Flight_A', 'lat': 10.0, 'lon': 48.3},
+        {'id': 'Flight_B', 'lat': 10.1, 'lon': 48.4},
+        {'id': 'Flight_C', 'lat': 10.2, 'lon': 48.2},
+    ]
+
+    counter = 0
+    for plane in scenario_planes:
+        plane = Node(
+            package='tcas_sim',
+            executable='plane_node',
+            name=f'plane_{counter}',
+            output='screen',
+            parameters=[{
+                'id': plane['id']
+            }]
+        )
+        ld.add_action(plane)
+        counter += 1
+
+    return ld

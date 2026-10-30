@@ -1,9 +1,11 @@
 #include <chrono>
 #include <memory>
 #include <string>
+#include <cmath>
 
 #include "rclcpp/rclcpp.hpp"
 #include "tcas_sim/msg/pose.hpp"
+#include "interfaces/msg/adsb.hpp"
 
 using namespace std::chrono_literals;
 
@@ -11,10 +13,10 @@ using namespace std::chrono_literals;
 class Plane : public rclcpp::Node
 {
 public:
-  Plane() : Node("plane") {
+  Plane() : Node("plane_X") {
 
-    this->declare_parameter<std::string>("plane_id", "unset");
-    this->get_parameter("plane_id", plane_id);
+    this->declare_parameter<std::string>("flight_number", "unset");
+    this->get_parameter("flight_number", flight_number);
 
     // plane will both publish and subscribe to this topic
     std::string broadcast_topic = "/airspace_broadcast";
@@ -26,11 +28,30 @@ public:
       std::bind(&Plane::broadcast_callback, this, std::placeholders::_1)
     );
 
+    subscription_adsb = this->create_subscription<interfaces::msg::Adsb>(
+      "/adsb_cmd", 10,
+      std::bind(&Plane::adsb_callback, this, std::placeholders::_1)
+    );
+
     timer_ = this->create_wall_timer(
       500ms, std::bind(&Plane::timer_callback, this)
     );
 
-    RCLCPP_INFO(this->get_logger(), "Plane [%s] initialized and listening on %s", plane_id.c_str(), broadcast_topic.c_str());
+    RCLCPP_INFO(this->get_logger(), "Node %s [flight_number=%s] initialized and listening...", this->get_name(), flight_number.c_str());
+  }
+
+  void init(std::string callsign, float lat, float lon, float alt) { // etc...
+    start();
+    // TODO set all parameters
+  }
+
+  void kill() {
+    sleep = true;
+    // TODO maybe unsubscribe from broadcase
+  }
+
+  void start() {
+    sleep = false;
   }
 
 private:
@@ -38,9 +59,13 @@ private:
   rclcpp::Publisher<tcas_sim::msg::Pose>::SharedPtr publisher_;
   rclcpp::Subscription<tcas_sim::msg::Pose>::SharedPtr subscription_;
 
-  std::string plane_id;
-  float lat = 10.0;
-  float lon = 48.3;
+  rclcpp::Subscription<interfaces::msg::Adsb>::SharedPtr subscription_adsb;
+
+  bool sleep;  // turns plane on or off because starting and killing plane nodes sucks!
+  // plane data
+  std::string flight_number;  // node name must be unique!, flight_number does not matter until now...
+  float lat;
+  float lon;
   float alt;
   float heading;
   float velocity;
@@ -51,7 +76,8 @@ private:
     lon += 0.01;
 
     auto message = tcas_sim::msg::Pose();
-    message.id = plane_id;
+    message.node_name = this->get_name();
+    message.flight_number = flight_number;
     message.latitude = lat;
     message.longitude = lon;
 
@@ -60,7 +86,7 @@ private:
 
   void broadcast_callback(const tcas_sim::msg::Pose::SharedPtr msg) {
     // self-echo filter
-    if (msg->id == plane_id) {
+    if (msg->node_name == this->get_name()) {
       return; 
     }
 
@@ -76,8 +102,18 @@ private:
     }
 
     // if we reach here, other plane is within our radar range
-    RCLCPP_INFO(this->get_logger(), "--> [%s] detected neighbor [%s] at distance %.4f", 
-                plane_id.c_str(), msg->id.c_str(), distance);
+    RCLCPP_INFO(this->get_logger(), "--> detected neighbor [%s] at distance %.4f",  msg->node_name.c_str(), distance);
+  }
+
+  void adsb_callback(const interfaces::msg::Adsb::SharedPtr msg) {
+    // if message not for me, ignore
+    if (msg->node_name != this->get_name()) {
+      return; 
+    }
+    
+    // TODO my adsb command receive here!!
+    RCLCPP_INFO(this->get_logger(), "--> received adsb message!");
+
   }
 
 };
