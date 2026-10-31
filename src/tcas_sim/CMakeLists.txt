@@ -27,23 +27,26 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 rosidl_get_typesupport_target(cpp_typesupport_target "${PROJECT_NAME}" "rosidl_typesupport_cpp")
 
 add_executable(plane_node src/plane_node.cpp)
+add_executable(static_plane src/static_plane.cpp)
+add_executable(user_plane src/user_plane.cpp)
 
-# --- MODERN CMAKE LINKAGE ---
-# Combine all target linkages under one keyword signature to avoid conflicts
-target_link_libraries(plane_node PUBLIC
-  rclcpp::rclcpp
-  ${interfaces_TARGETS}
-  "${cpp_typesupport_target}"
-)
-
-# Ensure local messages are generated before building the node
-add_dependencies(plane_node ${PROJECT_NAME}__rosidl_generator_cpp)
+foreach(target plane_node static_plane user_plane)
+  target_include_directories(${target} PRIVATE include)
+  target_link_libraries(${target} PUBLIC
+    rclcpp::rclcpp
+    ${interfaces_TARGETS}
+    "${cpp_typesupport_target}"
+  )
+  add_dependencies(${target} ${PROJECT_NAME}__rosidl_generator_cpp)
+endforeach()
 
 # for launch files
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 
 install(TARGETS
   plane_node
+  static_plane
+  user_plane
   DESTINATION lib/${PROJECT_NAME}
 )
 
