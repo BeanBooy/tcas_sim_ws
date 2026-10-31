@@ -9,16 +9,16 @@ import time
 
 from interfaces.msg import Adsb
 
-HOST = '127.0.0.1'
-PORT = 30003
-
 class AdsbHandler(Node):
 
     def __init__(self):
         super().__init__('adsb_handler')
-        
-        # TODO: parameterize HOST and PORT
-        self.publisher_ = self.create_publisher(Adsb, '/adsb_cmd', 10)
+        self.declare_parameter("host", "127.0.0.1")
+        self.HOST = self.get_parameter("host").get_parameter_value().string_value
+        self.declare_parameter("port", "30003")
+        self.PORT = int(self.get_parameter("port").get_parameter_value().string_value)
+        # topic for adsb command messages
+        self.publisher_ = self.create_publisher(Adsb, "/adsb_cmd", 10)
         # timer for scanning available nodes and cleanup current flights
         self.plane_discovery_timer = self.create_timer(1, self.plane_discovery_timer_callback)
         # master registry dictionary (key: node_name, value: {state, icao})
@@ -30,18 +30,18 @@ class AdsbHandler(Node):
         self.stream_thread.start()
 
     def stream_flight_data(self):
-        self.get_logger().info(f"Connecting to {HOST}:{PORT}...")
+        self.get_logger().info(f"Connecting to {self.HOST}:{self.PORT}...")
         while True:
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.connect((HOST, PORT))
+                    s.connect((self.HOST, self.PORT))
                     self.get_logger().info("Connected! Listening for flight data...")
                     buffer = ""
                     while True:
                         chunk = s.recv(1024)
                         if not chunk:
                             break
-                        buffer += chunk.decode('utf-8', errors='ignore')
+                        buffer += chunk.decode("utf-8", errors="ignore")
                         lines = buffer.split('\n')
                         # keep the last (possible incomplete) line in buffer
                         buffer = lines.pop()
@@ -58,7 +58,7 @@ class AdsbHandler(Node):
     def process_flight_data(self, data):
         fields = data.split(',')
         # only care about transmission messages (MSG) 2, 3 and 4
-        if fields[0] == 'MSG' and fields[1] in ['2', '3', '4']:
+        if fields[0] == "MSG" and fields[1] in ['2', '3', '4']:
             icao = fields[4].upper()  # 24 bit icao hex code
             # should never be null, but reconform since whole logic builds on the icao hex
             if not icao:
