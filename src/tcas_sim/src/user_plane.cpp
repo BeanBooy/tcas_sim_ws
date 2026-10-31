@@ -9,8 +9,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "tcas_sim/msg/pose.hpp"
 #include "interfaces/msg/adsb.hpp"
-#include "plane_node.cpp"
-
+#include "tcas_sim/plane_node.hpp"
 
 using namespace std::chrono_literals;
 
@@ -51,3 +50,11 @@ private:
     }
 
 };
+
+int main(int argc, char * argv[])
+{
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<UserPlane>());
+  rclcpp::shutdown();
+  return 0;
+}

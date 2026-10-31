@@ -26,16 +26,19 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 # Modern typesupport linkage for custom messages
 rosidl_get_typesupport_target(cpp_typesupport_target "${PROJECT_NAME}" "rosidl_typesupport_cpp")
 
-add_executable(plane_node src/plane_node.cpp)
-add_executable(static_plane src/static_plane.cpp)
-add_executable(user_plane src/user_plane.cpp)
+include_directories(include)
 
-foreach(target plane_node static_plane user_plane)
+#add_executable(plane_node src/plane_node.cpp)
+add_executable(static_plane src/static_plane.cpp src/plane_node.cpp)
+add_executable(user_plane src/user_plane.cpp src/plane_node.cpp)
+
+foreach(target static_plane user_plane)
   target_include_directories(${target} PRIVATE include)
   target_link_libraries(${target} PUBLIC
     rclcpp::rclcpp
     ${interfaces_TARGETS}
     "${cpp_typesupport_target}"
+    ${PROJECT_NAME}__rosidl_generator_cpp
   )
   add_dependencies(${target} ${PROJECT_NAME}__rosidl_generator_cpp)
 endforeach()
@@ -43,8 +46,13 @@ endforeach()
 # for launch files
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 
+install(
+  DIRECTORY include/
+  DESTINATION include
+)
+
 install(TARGETS
-  plane_node
+  #plane_node
   static_plane
   user_plane
   DESTINATION lib/${PROJECT_NAME}

@@ -25,7 +25,7 @@ def generate_launch_description():
     for plane in scenario_planes:
         plane = Node(
             package='tcas_sim',
-            executable='plane_node',
+            executable='static_plane',
             name=f'plane_{counter}',
             output='screen',
             parameters=[{
