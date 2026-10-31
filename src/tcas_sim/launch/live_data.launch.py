@@ -7,11 +7,11 @@ def generate_launch_description():
     adsb_handler = Node(
             package='adsb_handler',
             executable='adsb_handler',
-            #name=f'plane_{counter}',
             output='screen',
-            #parameters=[{
-            #    'data_stream': 'live'  # or 'live'
-            #}]
+            parameters=[{
+               'host': '127.0.0.1',
+               'port': '30003'
+            }]
         )
     ld.add_action(adsb_handler)
 
