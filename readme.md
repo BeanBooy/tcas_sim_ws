@@ -31,3 +31,11 @@ Tells ros that my terminal can display colored text:
 ```console
 $ echo "export RCUTILS_COLORIZED_OUTPUT=1" >> ~/.bashrc
 ```
+
+## Usefull links:
+
+1. Decode SBS1 (BaseStation) format: http://woodair.net/sbs/article/barebones42_socket_data.htm
+
+```console
+$ clear && colcon build && source install/setup.bash && ros2 launch tcas_sim live_data.launch.py 
+```

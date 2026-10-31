@@ -16,10 +16,10 @@ class AdsbHandler(Node):
     def __init__(self):
         super().__init__('adsb_handler')
 
-        self.publisher_ = self.create_publisher(Adsb, 'adsb_cmd', 10)
-        timer_period = 0.5  # seconds
-        self.timer = self.create_timer(timer_period, self.timer_callback)
-        self.i = 0
+        self.publisher_ = self.create_publisher(Adsb, '/adsb_cmd', 10)
+        # timer_period = 0.5  # seconds
+        # self.timer = self.create_timer(timer_period, self.timer_callback)
+        # self.i = 0
 
         # timer for scanning available nodes
         self.plane_discovery_timer = self.create_timer(1, self.plane_discovery_timer_callback)
@@ -30,36 +30,106 @@ class AdsbHandler(Node):
         # last known active plane nodes (same as the plane_pool) but as a set for easy diffing
         self.last_active_plane_nodes = set()
         # start listening to tcp port for data
-        self.stream_thread = threading.Thread(target=self.stream_dump1090, daemon=True)
+        self.stream_thread = threading.Thread(target=self.stream_flight_data, daemon=True)
         self.stream_thread.start()
 
 
-    def stream_dump1090(self):
+    def stream_flight_data(self):
+        self.get_logger().info(f"Connecting to {HOST}:{PORT}...")
         while True:
-            self.get_logger().info(f"Connecting to {HOST}:{PORT}...")
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.connect((HOST, PORT))
                     self.get_logger().info("Connected! Listening for flight data...")
+                    buffer = ""
                     while True:
-                        data = s.recv(1024)
-                        if not data:
+                        chunk = s.recv(1024)
+                        if not chunk:
                             break
-                        # precessing
-                        self.get_logger().info(f"received: {data}")
+                        buffer += chunk.decode('utf-8', errors='ignore')
+                        lines = buffer.split('\n')
+                        # keep the last (possible incomplete) line in buffer
+                        buffer = lines.pop()
+                        # clean up the data
+                        for line in lines:
+                            line = line.strip()
+                            if line:
+                                self.process_flight_data(line)
                         
             except ConnectionRefusedError:
-                self.get_logger().error("Connection refused. Make sure dump1090 is running with the --net flag.")
-            # wait some time, then try reconnect.
+                self.get_logger().error("Connection refused! Check ADS-B receiver config.")
+            # wait some time, then try reconnect
             time.sleep(2.0)
 
+    def process_flight_data(self, data):
+        #self.get_logger().info(f"received: {data}")
 
-    def timer_callback(self):
-        msg = Adsb()
-        msg.node_name = 'plane_%d' % self.i
-        self.publisher_.publish(msg)
-        self.get_logger().info('Publishing to plane node "%s"' % msg.node_name)
-        self.i += 1
+        fields = data.split(',')
+
+        # example messages from console:
+        #           icao         alt  GS Track  lat      lon   var squawk
+        # 'MSG,8,,,407F38,,,,,,,     ,   ,   ,        ,        ,   ,    , , , , \n'
+        # 'MSG,5,,,440669,,,,,,,36000,   ,   ,        ,        ,   ,    ,0,0,0,0\n'
+        # 'MSG,8,,,440669,,,,,,,     ,   ,   ,        ,        ,   ,    , , , , \n'
+        # 'MSG,4,,,440669,,,,,,,     ,474,288,        ,        ,320,    ,0,0,0,0\n'
+        # 'MSG,5,,,407F38,,,,,,,38975,   ,   ,        ,        ,   ,    ,0,0,0,0\n'
+        # 'MSG,4,,,407F38,,,,,,,     ,454,136,        ,        ,64 ,    ,0,0,0,0\n'
+        # 'MSG,5,,,407F38,,,,,,,38975,   ,   ,        ,        ,   ,    ,0,0,0,0\n'
+        # 'MSG,3,,,407F38,,,,,,,38975,   ,   ,48.59436,11.01562,   ,    ,0,0,0,0\n'
+        # 'MSG,3,,,440669,,,,,,,36000,   ,   ,48.98427,11.76137,   ,    ,0,0,0,0\n'
+        # 'MSG,8,,,39E688,,,,,,,     ,   ,   ,        ,        ,   ,    , , , , \n'
+        # 'MSG,3,,,782158,,,,,,,35000,   ,   ,        ,        ,   ,    ,0,0,0,0\n'
+        # 'MSG,4,,,782158,,,,,,,     ,535,186,        ,        ,-64,    ,0,0,0,0\n'
+        # 'MSG,6,,,406E10,,,,,,,     ,   ,   ,        ,        ,   ,3106,0,0,0,0\n'
+        # 'MSG,5,,,440669,,,,,,,36000,   ,   ,        ,        ,   ,    , , , , \n'
+        # 'MSG,3,,,39E688,,,,,,,20800,   ,   ,48.85210,11.19500,   ,    ,0,0,0,0\n'
+        # 'MSG,5,,,782158,,,,,,,35000,   ,   ,        ,        ,   ,    , , , , \n'
+        # 'MSG,5,,,782158,,,,,,,35000,   ,   ,        ,        ,   ,    ,0,0,0,0\n'
+        # 'MSG,5,,,782158,,,,,,,35000,   ,   ,        ,        ,   ,    ,0,0,0,0\n'
+
+        # only care about transmission messages (MSG) 2, 3 and 4
+        if fields[0] == 'MSG' and fields[1] in ['2', '3', '4']:
+            self.get_logger().info(f"received XXXX")
+            icao = fields[4].upper()  # 24 bit icao hex code
+            
+            if not icao:
+                return
+
+            plane_node = self.get_plane_node_from_icao(icao)
+            if plane_node is None:
+                plane_node = self.assign_flight_to_node(icao)
+                if plane_node is None:
+                    return  # no free plane node found...
+
+            adsb_msg = Adsb()
+            adsb_msg.node_name = plane_node
+            adsb_msg.icao = icao
+            if fields[11] != "":
+                adsb_msg.altitude = int(fields[11])
+                adsb_msg.altitude_valid = True
+            if fields[12] != "":
+                adsb_msg.ground_speed = int(fields[12])
+                adsb_msg.ground_speed_valid = True
+            if fields[13] != "":
+                adsb_msg.track = int(fields[13])
+                adsb_msg.track_valid = True
+            if fields[14] != "" and fields[15] != "":
+                adsb_msg.latitude = float(fields[14])
+                adsb_msg.longitude = float(fields[15])
+                adsb_msg.coords_valid = True
+            if fields[16] != "":
+                adsb_msg.vertical_speed = int(fields[16])
+                adsb_msg.vertical_speed_valid = True
+
+            self.publisher_.publish(adsb_msg)
+            self.get_logger().info(f"published to: {plane_node}")
+
+    # def timer_callback(self):
+    #     msg = Adsb()
+    #     msg.node_name = 'plane_%d' % self.i
+    #     self.publisher_.publish(msg)
+    #     self.get_logger().info('Publishing to plane node "%s"' % msg.node_name)
+    #     self.i += 1
 
     def plane_discovery_timer_callback(self):
         # get current plane nodes
@@ -108,8 +178,14 @@ class AdsbHandler(Node):
                 self.get_logger().info(f"Assigned live flight {icao_code} to plane node {node_name}")
                 return node_name
         
-        self.get_logger().error("No available sleeping plane nodes left to handle incoming ADS-B data!")
+        self.get_logger().error(f"Can't assign icao {icao_code}, too few nodes!")
         self.get_logger().error(f"Currently active plane nodes: {len(self.plane_pool)}")
+        return None
+
+    def get_plane_node_from_icao(self, icao_code):
+        for node_name, info in self.plane_pool.items():
+            if info["state"] == "active" and info["icao"] == icao_code:
+                return node_name
         return None
 
 
