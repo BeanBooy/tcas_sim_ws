@@ -2,14 +2,14 @@
 #include "rclcpp/rclcpp.hpp"
 #include "interfaces/msg/pose.hpp"
 
-struct AircraftState {
+typedef struct AircraftState {
   double latitude = 0.0;
   double longitude = 0.0;
   double altitude = 0.0;
   double heading = 0.0;
   double velocity = 0.0;
   double vertical_speed = 0.0;
-};
+} aircraft_state_t;
 
 template <typename T>
 struct StampedValue {
@@ -29,14 +29,14 @@ struct StampedValue {
     }
 };
 
-struct StampedAircraftState {
+typedef struct StampedAircraftState {
   StampedValue<double> latitude;
   StampedValue<double> longitude;
   StampedValue<double> altitude;
   StampedValue<double> heading;
   StampedValue<double> velocity;
   StampedValue<double> vertical_speed;
-};
+} stamped_aircraft_state_t;
 
 
 class Plane : public rclcpp::Node {
@@ -51,7 +51,7 @@ protected:
   bool is_active;  // for user planes always true, for static planes only if connected to flight
   std::string icao_hex;
 
-  virtual struct AircraftState get_current_pos_state() = 0;
-  void broadcast_position(struct AircraftState& aircraft_state) const;
+  virtual aircraft_state_t get_current_pos_state() = 0;
+  void broadcast_position(aircraft_state_t& aircraft_state) const;
   void timer_callback();
 };

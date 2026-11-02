@@ -30,7 +30,7 @@ public:
 private:
     rclcpp::Subscription<interfaces::msg::Pose>::SharedPtr subscription_;
 
-    struct AircraftState get_current_pos_state() override {
+    aircraft_state_t get_current_pos_state() override {
         return AircraftState{};
     }
 

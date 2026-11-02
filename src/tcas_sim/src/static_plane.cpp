@@ -22,16 +22,14 @@ public:
     }
 
 private:
-    // update time parameter also needed for extrapolation maybe ?!?!
+    // struct filled up by adsb data
+    StampedAircraftState stamped_aircraft_state{};
+    // subscription to adsb topic
+    rclcpp::Subscription<interfaces::msg::Adsb>::SharedPtr adsb_subscription;
 
-    struct AircraftState get_current_pos_state() override {
+    aircraft_state_t get_current_pos_state() override {
         return AircraftState{};
     }
-
-    StampedAircraftState stamped_aircraft_state{};
-     
-
-    rclcpp::Subscription<interfaces::msg::Adsb>::SharedPtr adsb_subscription;
 
     void adsb_callback(const interfaces::msg::Adsb::SharedPtr msg) {
         // if message not for me, ignore
@@ -52,9 +50,7 @@ private:
         }
         if (msg->vertical_speed_valid) stamped_aircraft_state.vertical_speed.set(msg->vertical_speed);
 
-        
-
-
+        // TODO: remove debug log
         if (std::string(this->get_name()) == "plane_0") {
             RCLCPP_INFO(this->get_logger(), "\nalt: [age: %lld] %.2f\nlat: [age: %lld] %.4f\nlon: [age: %lld] %.4f\ngs: [age: %lld] %.2f\nheading: [age: %lld] %.2f\nvs: [age: %lld] %.2f\n", 
                 stamped_aircraft_state.altitude.age_ms(),
