@@ -81,6 +81,7 @@ class AdsbHandler(Node):
     def send_adsb_command(self, plane_node, icao, alt, gs, track, lat, lon, vs):
         adsb_msg = Adsb()
         adsb_msg.node_name = plane_node
+        adsb_msg.is_active = True
         adsb_msg.icao = icao
         if alt:
             adsb_msg.altitude = alt
@@ -103,17 +104,25 @@ class AdsbHandler(Node):
         # setting update time to keep track of flight validy
         self.plane_pool[plane_node]["last_update"] = time.time()
 
+    def send_adsb_kill_command(self, plane_node):
+        adsb_msg = Adsb()
+        adsb_msg.node_name = plane_node
+        adsb_msg.is_active = False
+        # send new data to plane node
+        self.publisher_.publish(adsb_msg)
+
     def plane_discovery_timer_callback(self):
         # unasign plane nodes which haven't received updates in a while (probably because out of range)
         current_time = time.time()
         for node_name, info in self.plane_pool.items():
             if info["state"] == "active" and current_time - info["last_update"] > 10.0:  # seconds
                 info["state"] = "free"
+                self.send_adsb_kill_command(node_name)
                 self.get_logger().warn(f"Node {node_name} (flight {info["icao"]}) was released! (hasn't received updates in reasonable abount of time)")
         # get current plane nodes from ros graph
         current_plane_nodes = set(
             name for name in self.get_node_names() 
-            if name.lstrip('/').startswith("plane_")
+            if name.lstrip('/').startswith("s_plane_")
         )
         joined_nodes = current_plane_nodes - self.last_active_plane_nodes
         left_nodes = self.last_active_plane_nodes - current_plane_nodes

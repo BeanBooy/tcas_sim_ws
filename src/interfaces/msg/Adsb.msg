@@ -1,4 +1,5 @@
 string node_name
+bool is_active
 
 string icao
 

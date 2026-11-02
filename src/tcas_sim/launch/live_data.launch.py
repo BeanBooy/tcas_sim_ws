@@ -4,6 +4,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     ld = LaunchDescription()
 
+    ############## ADSB ##############
     adsb_handler = Node(
             package='adsb_handler',
             executable='adsb_handler',
@@ -15,24 +16,35 @@ def generate_launch_description():
         )
     ld.add_action(adsb_handler)
 
-    scenario_planes = [
-        {'id': 'Flight_A', 'lat': 10.0, 'lon': 48.3},
-        {'id': 'Flight_B', 'lat': 10.1, 'lon': 48.4},
-        {'id': 'Flight_C', 'lat': 10.2, 'lon': 48.2},
-    ]
+    ############## USER PLANES ##############
+    # i dont think user planes should be launched via this file...
+    # each user plane should be startet manually (or with a seperat launch file) on the control machine
+    plane = Node(
+            package='tcas_sim',
+            executable='user_plane',
+            name=f'u_plane_99',
+            output='screen',
+        )
+    ld.add_action(plane)
 
-    counter = 0
-    for plane in scenario_planes:
+    ############## STATIC PLANES ##############
+    static_plane_count = 3
+
+    for x in range(static_plane_count):
         plane = Node(
             package='tcas_sim',
             executable='static_plane',
-            name=f'plane_{counter}',
+            name=f's_plane_{x}',
             output='screen',
-            parameters=[{
-                'id': plane['id']
-            }]
         )
         ld.add_action(plane)
-        counter += 1
+    
+    ############## MONITOR ##############
+    monitor = Node(
+            package='monitor',
+            executable='monitor',
+            output='screen',
+        )
+    ld.add_action(monitor)
 
     return ld

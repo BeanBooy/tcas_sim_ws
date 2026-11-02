@@ -7,8 +7,6 @@
 #include <cmath>
 
 #include "rclcpp/rclcpp.hpp"
-#include "tcas_sim/msg/pose.hpp"
-#include "interfaces/msg/adsb.hpp"
 #include "tcas_sim/plane_node.hpp"
 
 using namespace std::chrono_literals;
@@ -20,15 +18,19 @@ public:
     {
         RCLCPP_INFO(this->get_logger(), "User Plane.");
 
-        subscription_ = this->create_subscription<tcas_sim::msg::Pose>(
+        this->declare_parameter<std::string>("icao_hex", "unset");
+        this->get_parameter("icao_hex", icao_hex);
+
+        subscription_ = this->create_subscription<interfaces::msg::Pose>(
                         broadcast_topic, 10,
                         std::bind(&UserPlane::broadcast_callback, this, std::placeholders::_1)
                         );
+        this->is_active = true;
     }
 private:
-    rclcpp::Subscription<tcas_sim::msg::Pose>::SharedPtr subscription_;
+    rclcpp::Subscription<interfaces::msg::Pose>::SharedPtr subscription_;
 
-    void broadcast_callback(const tcas_sim::msg::Pose::SharedPtr msg) {
+    void broadcast_callback(const interfaces::msg::Pose::SharedPtr msg) {
         // self-echo filter
         if (msg->icao_hex == icao_hex) {
             return;

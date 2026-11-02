@@ -1,6 +1,6 @@
 #pragma once
 #include "rclcpp/rclcpp.hpp"
-#include "tcas_sim/msg/pose.hpp"
+#include "interfaces/msg/pose.hpp"
 
 struct AircraftState {
   double latitude = 0.0;
@@ -8,23 +8,48 @@ struct AircraftState {
   double altitude = 0.0;
   double heading = 0.0;
   double velocity = 0.0;
+  double vertical_speed = 0.0;
 };
+
+template <typename T>
+struct StampedValue {
+    T value;
+    std::chrono::steady_clock::time_point timestamp;
+
+    // value setter with timestamp
+    void set(T value) {
+      this->value = value;
+      this->timestamp = std::chrono::steady_clock::now();
+    }
+
+    // helper to easily check the age of the value
+    long long age_ms() const {
+        auto duration = std::chrono::steady_clock::now() - timestamp;
+        return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+    }
+};
+
+struct StampedAircraftState {
+  StampedValue<double> latitude;
+  StampedValue<double> longitude;
+  StampedValue<double> altitude;
+  StampedValue<double> heading;
+  StampedValue<double> velocity;
+  StampedValue<double> vertical_speed;
+};
+
 
 class Plane : public rclcpp::Node {
 public:
   Plane();
-  void init(std::string callsign, float lat, float lon, float alt);
-  void kill();
-  void start();
 
 protected:
   rclcpp::TimerBase::SharedPtr timer_;
-  rclcpp::Publisher<tcas_sim::msg::Pose>::SharedPtr publisher_;
+  rclcpp::Publisher<interfaces::msg::Pose>::SharedPtr publisher_;
   std::string broadcast_topic = "/airspace_broadcast";
   AircraftState aircraft_state{};
-  bool sleep = false; // Initialize here!
+  bool is_active;  // for user planes always true, for static planes only if connected to flight
   std::string icao_hex;
-  std::string flight_number;
 
   virtual void update_position();
   void broadcast_position();
