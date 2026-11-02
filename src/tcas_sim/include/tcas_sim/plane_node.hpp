@@ -51,7 +51,7 @@ protected:
   bool is_active;  // for user planes always true, for static planes only if connected to flight
   std::string icao_hex;
 
-  virtual void update_position();
-  void broadcast_position();
+  virtual struct AircraftState get_current_pos_state() = 0;
+  void broadcast_position(struct AircraftState& aircraft_state) const;
   void timer_callback();
 };

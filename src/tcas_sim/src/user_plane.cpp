@@ -30,6 +30,10 @@ public:
 private:
     rclcpp::Subscription<interfaces::msg::Pose>::SharedPtr subscription_;
 
+    struct AircraftState get_current_pos_state() override {
+        return AircraftState{};
+    }
+
     void broadcast_callback(const interfaces::msg::Pose::SharedPtr msg) {
         // self-echo filter
         if (msg->icao_hex == icao_hex) {

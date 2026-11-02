@@ -22,12 +22,7 @@ Plane::Plane() : Node("plane_X") {
 }
 
 
-void Plane::update_position() {
-  aircraft_state.latitude += 0.01;
-  aircraft_state.longitude += 0.01;
-}
-
-void Plane::broadcast_position() {
+void Plane::broadcast_position(struct AircraftState& aircraft_state) const {
   auto message = interfaces::msg::Pose();
   message.icao_hex = icao_hex;
   message.latitude = aircraft_state.latitude;
@@ -40,7 +35,7 @@ void Plane::broadcast_position() {
 
 void Plane::timer_callback() {
   if (is_active) {
-    //update_position();
-    broadcast_position();
+    struct AircraftState current_pos_state = get_current_pos_state();
+    broadcast_position(current_pos_state);
   }
 }

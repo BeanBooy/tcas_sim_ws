@@ -1,6 +1,3 @@
-//
-// Created by calvinbia on 10/31/26.
-//
 #include <chrono>
 #include <memory>
 #include <string>
@@ -26,7 +23,11 @@ public:
 
 private:
     // update time parameter also needed for extrapolation maybe ?!?!
-    void update_position() override {}
+
+    struct AircraftState get_current_pos_state() override {
+        return AircraftState{};
+    }
+
     StampedAircraftState stamped_aircraft_state{};
      
 
@@ -55,7 +56,7 @@ private:
 
 
         if (std::string(this->get_name()) == "plane_0") {
-            RCLCPP_INFO(this->get_logger(), "\nalt: [age: %d] %.2f\nlat: [age: %d] %.4f\nlon: [age: %d] %.4f\ngs: [age: %d] %.2f\nheading: [age: %d] %.2f\nvs: [age: %d] %.2f\n", 
+            RCLCPP_INFO(this->get_logger(), "\nalt: [age: %lld] %.2f\nlat: [age: %lld] %.4f\nlon: [age: %lld] %.4f\ngs: [age: %lld] %.2f\nheading: [age: %lld] %.2f\nvs: [age: %lld] %.2f\n", 
                 stamped_aircraft_state.altitude.age_ms(),
                 stamped_aircraft_state.altitude.value,
                 stamped_aircraft_state.latitude.age_ms(),
