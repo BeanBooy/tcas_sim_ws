@@ -16,7 +16,8 @@ class Monitor(Node):
             10)
 
     def listener_callback(self, msg):
-        self.get_logger().info(f"I heard something from {msg.icao_hex}")
+        #self.get_logger().info(f"I heard something from {msg.icao_hex}")
+        return
 
 
 def main(args=None):

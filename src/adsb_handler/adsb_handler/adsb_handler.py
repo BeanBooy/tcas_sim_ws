@@ -71,12 +71,12 @@ class AdsbHandler(Node):
                     return  # no free plane node found... displays error
             # send message
             self.send_adsb_command(plane_node, icao, 
-                int(fields[11]) if fields[11] != "" else None,  # altitude
-                int(fields[12]) if fields[12] != "" else None,  # ground speed
-                int(fields[13]) if fields[13] != "" else None,  # track
+                float(fields[11]) * 0.3048 if fields[11] != "" else None,  # altitude (ft -> meter)
+                float(fields[12]) * 0.514444 if fields[12] != "" else None,  # ground speed (kts -> m/s)
+                float(fields[13]) if fields[13] != "" else None,  # track
                 float(fields[14]) if fields[14] != "" else None,  # latitude
                 float(fields[15]) if fields[15] != "" else None,  # longitude
-                int(fields[16]) if fields[16] != "" else None)  # vertical speed
+                float(fields[16]) * 0.00508 if fields[16] != "" else None)  # vertical speed (ft/min -> m/s)
 
     def send_adsb_command(self, plane_node, icao, alt, gs, track, lat, lon, vs):
         adsb_msg = Adsb()
@@ -155,7 +155,7 @@ class AdsbHandler(Node):
                 self.get_logger().info(f"Assigned flight {icao_code} to node {node_name}")
                 return node_name
         # if no free node is availabe
-        self.get_logger().error(f"Can't assign icao {icao_code}, too few nodes! ({len(self.plane_pool)})")
+        #self.get_logger().error(f"Can't assign icao {icao_code}, too few nodes! ({len(self.plane_pool)})")
         return None
 
     def get_plane_node_from_icao(self, icao_code):

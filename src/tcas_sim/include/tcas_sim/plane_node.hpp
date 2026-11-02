@@ -14,7 +14,7 @@ typedef struct AircraftState {
 template <typename T>
 struct StampedValue {
     T value;
-    std::chrono::steady_clock::time_point timestamp;
+    std::chrono::steady_clock::time_point timestamp = std::chrono::steady_clock::now();
 
     // value setter with timestamp
     void set(T value) {
@@ -23,9 +23,9 @@ struct StampedValue {
     }
 
     // helper to easily check the age of the value
-    long long age_ms() const {
-        auto duration = std::chrono::steady_clock::now() - timestamp;
-        return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+    double age_sec() const {
+        std::chrono::duration<double> duration = std::chrono::steady_clock::now() - timestamp;
+        return duration.count();
     }
 };
 
