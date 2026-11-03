@@ -6,3 +6,5 @@ float32 longitude
 float32 altitude
 float32 heading
 float32 velocity
+float32 pitch
+float32 roll

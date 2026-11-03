@@ -16,6 +16,8 @@ struct AircraftState {
 
   double heading = 0.0;
   double velocity = 0.0;
+  double pitch = 0.0;
+  double roll = 0.0;
 };
 
 class Plane : public rclcpp::Node
@@ -78,6 +80,8 @@ protected:
     message.altitude = aircraft_state.altitude;
     message.heading = aircraft_state.heading;
     message.velocity = aircraft_state.velocity;
+    message.pitch = aircraft_state.pitch;
+    message.roll = aircraft_state.roll;
 
     publisher_->publish(message);
   }
@@ -88,6 +92,8 @@ protected:
   }
 };
 
+#ifndef TCAS_SIM_CHILD_PLANE
+
 int main(int argc, char * argv[])
 {
   rclcpp::init(argc, argv);
@@ -95,3 +101,5 @@ int main(int argc, char * argv[])
   rclcpp::shutdown();
   return 0;
 }
+
+#endif  // TCAS_SIM_CHILD_PLANE
