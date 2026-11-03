@@ -5,7 +5,7 @@ import signal
 from rclpy.node import Node
 from interfaces.msg import Pose
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel
 from PyQt5.QtCore import QTimer
 import pyqtgraph as pg
 
@@ -48,20 +48,37 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Airspace Monitor")
         self.resize(900, 700)
 
+        # Main container widget for the central window
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
-        layout = QVBoxLayout(self.central_widget)
 
-        # pyqtgraph
+        # Use QHBoxLayout for side-by-side arrangement
+        main_layout = QHBoxLayout(self.central_widget)
+
+        # --- 1. Left Sidebar Setup (~20% width) ---
+        self.sidebar_widget = QWidget()
+        sidebar_layout = QVBoxLayout(self.sidebar_widget)
+
+        # Optional: Add a placeholder label or controls to your sidebar
+        sidebar_label = QLabel("Sidebar Controls")
+        sidebar_layout.addWidget(sidebar_label)
+        # Set a subtle background style so you can see the sidebar bounds
+        self.sidebar_widget.setStyleSheet("background-color: #f0f0f0; border-right: 1px solid #ccc;")
+
+        # --- 2. PyQtGraph Plot Widget Setup (~80% width) ---
         self.plot_widget = pg.PlotWidget()
         self.plot_widget.setLabel('left', 'Latitude (Grad)')
         self.plot_widget.setLabel('bottom', 'Longitude (Grad)')
         self.plot_widget.showGrid(x=True, y=True)
-        # mouse controlls
+
+        # Mouse controls
         view_box = self.plot_widget.getPlotItem().getViewBox()
         view_box.setMouseMode(view_box.PanMode)
-                
-        layout.addWidget(self.plot_widget)
+
+        # --- 3. Add widgets to the main layout with stretch factors ---
+        # stretch=1 and stretch=4 divide the space into 5 parts (1/5 = 20%, 4/5 = 80%)
+        main_layout.addWidget(self.sidebar_widget, stretch=1)
+        main_layout.addWidget(self.plot_widget, stretch=4)
 
         # dics for each flight graph
         self.curves = {}
