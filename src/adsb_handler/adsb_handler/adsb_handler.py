@@ -31,29 +31,38 @@ class AdsbHandler(Node):
 
     def stream_flight_data(self):
         self.get_logger().info(f"Connecting to {self.HOST}:{self.PORT}...")
-        while True:
+        while rclpy.ok():
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(1.0)
                     s.connect((self.HOST, self.PORT))
                     self.get_logger().info("Connected! Listening for flight data...")
                     buffer = ""
-                    while True:
-                        chunk = s.recv(1024)
-                        if not chunk:
-                            break
-                        buffer += chunk.decode("utf-8", errors="ignore")
-                        lines = buffer.split('\n')
-                        # keep the last (possible incomplete) line in buffer
-                        buffer = lines.pop()
-                        # clean up the data
-                        for line in lines:
-                            line = line.strip()
-                            if line:
-                                self.process_flight_data(line)
+                    while rclpy.ok():
+                        try:
+                            chunk = s.recv(1024)
+                            if not chunk:
+                                break
+                            buffer += chunk.decode("utf-8", errors="ignore")
+                            lines = buffer.split('\n')
+                            # keep the last (possible incomplete) line in buffer
+                            buffer = lines.pop()
+                            # clean up the data
+                            for line in lines:
+                                line = line.strip()
+                                if line:
+                                    self.process_flight_data(line)
+                        except socket.timeout:
+                            continue
             except ConnectionRefusedError:
                 self.get_logger().error("Connection refused! Check ADS-B receiver config.")
+            except socket.timeout:
+                pass
             # wait some time, then try reconnect
-            time.sleep(2.0)
+            for _ in range(20):  # 2 sec in 0.1 sec steps to check if node still active
+                if not rclpy.ok():
+                    break
+                time.sleep(0.1)
 
     def process_flight_data(self, data):
         fields = data.split(',')
@@ -66,21 +75,25 @@ class AdsbHandler(Node):
             # find or initialize the plane node which handles this flight
             plane_node = self.get_plane_node_from_icao(icao)
             if plane_node is None:
+                # assign new flights only on first lat/lon receive
+                if fields[14] == "":
+                    return
                 plane_node = self.assign_flight_to_node(icao)
                 if plane_node is None:
                     return  # no free plane node found... displays error
             # send message
             self.send_adsb_command(plane_node, icao, 
-                int(fields[11]) if fields[11] != "" else None,  # altitude
-                int(fields[12]) if fields[12] != "" else None,  # ground speed
-                int(fields[13]) if fields[13] != "" else None,  # track
+                float(fields[11]) * 0.3048 if fields[11] != "" else None,  # altitude (ft -> meter)
+                float(fields[12]) * 0.514444 if fields[12] != "" else None,  # ground speed (kts -> m/s)
+                float(fields[13]) if fields[13] != "" else None,  # track
                 float(fields[14]) if fields[14] != "" else None,  # latitude
                 float(fields[15]) if fields[15] != "" else None,  # longitude
-                int(fields[16]) if fields[16] != "" else None)  # vertical speed
+                float(fields[16]) * 0.00508 if fields[16] != "" else None)  # vertical speed (ft/min -> m/s)
 
     def send_adsb_command(self, plane_node, icao, alt, gs, track, lat, lon, vs):
         adsb_msg = Adsb()
         adsb_msg.node_name = plane_node
+        adsb_msg.is_active = True
         adsb_msg.icao = icao
         if alt:
             adsb_msg.altitude = alt
@@ -103,17 +116,25 @@ class AdsbHandler(Node):
         # setting update time to keep track of flight validy
         self.plane_pool[plane_node]["last_update"] = time.time()
 
+    def send_adsb_kill_command(self, plane_node):
+        adsb_msg = Adsb()
+        adsb_msg.node_name = plane_node
+        adsb_msg.is_active = False
+        # send new data to plane node
+        self.publisher_.publish(adsb_msg)
+
     def plane_discovery_timer_callback(self):
         # unasign plane nodes which haven't received updates in a while (probably because out of range)
         current_time = time.time()
         for node_name, info in self.plane_pool.items():
             if info["state"] == "active" and current_time - info["last_update"] > 10.0:  # seconds
                 info["state"] = "free"
+                self.send_adsb_kill_command(node_name)
                 self.get_logger().warn(f"Node {node_name} (flight {info["icao"]}) was released! (hasn't received updates in reasonable abount of time)")
         # get current plane nodes from ros graph
         current_plane_nodes = set(
             name for name in self.get_node_names() 
-            if name.lstrip('/').startswith("plane_")
+            if name.lstrip('/').startswith("s_plane_")
         )
         joined_nodes = current_plane_nodes - self.last_active_plane_nodes
         left_nodes = self.last_active_plane_nodes - current_plane_nodes
@@ -146,7 +167,7 @@ class AdsbHandler(Node):
                 self.get_logger().info(f"Assigned flight {icao_code} to node {node_name}")
                 return node_name
         # if no free node is availabe
-        self.get_logger().error(f"Can't assign icao {icao_code}, too few nodes! ({len(self.plane_pool)})")
+        #self.get_logger().error(f"Can't assign icao {icao_code}, too few nodes! ({len(self.plane_pool)})")
         return None
 
     def get_plane_node_from_icao(self, icao_code):
@@ -157,12 +178,16 @@ class AdsbHandler(Node):
 
 
 def main(args=None):
+    rclpy.init(args=args)
+    node = AdsbHandler()
     try:
-        with rclpy.init(args=args):
-            node = AdsbHandler()
-            rclpy.spin(node)
+        rclpy.spin(node)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':
