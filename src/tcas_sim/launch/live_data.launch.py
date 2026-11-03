@@ -28,7 +28,7 @@ def generate_launch_description():
     ld.add_action(plane)
 
     ############## STATIC PLANES ##############
-    static_plane_count = 3
+    static_plane_count = 2
 
     for x in range(static_plane_count):
         plane = Node(

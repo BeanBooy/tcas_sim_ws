@@ -74,6 +74,15 @@ private:
         //         extrap.vertical_speed
         //     );
         // }
+
+        // ignore extrapolation
+        // extrap.heading = stamped_aircraft_state.heading.value;
+        // extrap.velocity = stamped_aircraft_state.velocity.value;
+        // extrap.vertical_speed = stamped_aircraft_state.vertical_speed.value;
+        // extrap.latitude = stamped_aircraft_state.latitude.value;
+        // extrap.longitude = stamped_aircraft_state.longitude.value;
+        // extrap.altitude = stamped_aircraft_state.altitude.value;
+
         
         return extrap;
     }

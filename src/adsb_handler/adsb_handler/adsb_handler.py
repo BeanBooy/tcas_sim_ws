@@ -31,29 +31,38 @@ class AdsbHandler(Node):
 
     def stream_flight_data(self):
         self.get_logger().info(f"Connecting to {self.HOST}:{self.PORT}...")
-        while True:
+        while rclpy.ok():
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(1.0)
                     s.connect((self.HOST, self.PORT))
                     self.get_logger().info("Connected! Listening for flight data...")
                     buffer = ""
-                    while True:
-                        chunk = s.recv(1024)
-                        if not chunk:
-                            break
-                        buffer += chunk.decode("utf-8", errors="ignore")
-                        lines = buffer.split('\n')
-                        # keep the last (possible incomplete) line in buffer
-                        buffer = lines.pop()
-                        # clean up the data
-                        for line in lines:
-                            line = line.strip()
-                            if line:
-                                self.process_flight_data(line)
+                    while rclpy.ok():
+                        try:
+                            chunk = s.recv(1024)
+                            if not chunk:
+                                break
+                            buffer += chunk.decode("utf-8", errors="ignore")
+                            lines = buffer.split('\n')
+                            # keep the last (possible incomplete) line in buffer
+                            buffer = lines.pop()
+                            # clean up the data
+                            for line in lines:
+                                line = line.strip()
+                                if line:
+                                    self.process_flight_data(line)
+                        except socket.timeout:
+                            continue
             except ConnectionRefusedError:
                 self.get_logger().error("Connection refused! Check ADS-B receiver config.")
+            except socket.timeout:
+                pass
             # wait some time, then try reconnect
-            time.sleep(2.0)
+            for _ in range(20):  # 2 sec in 0.1 sec steps to check if node still active
+                if not rclpy.ok():
+                    break
+                time.sleep(0.1)
 
     def process_flight_data(self, data):
         fields = data.split(',')
@@ -66,6 +75,9 @@ class AdsbHandler(Node):
             # find or initialize the plane node which handles this flight
             plane_node = self.get_plane_node_from_icao(icao)
             if plane_node is None:
+                # assign new flights only on first lat/lon receive
+                if fields[14] == "":
+                    return
                 plane_node = self.assign_flight_to_node(icao)
                 if plane_node is None:
                     return  # no free plane node found... displays error
@@ -166,12 +178,16 @@ class AdsbHandler(Node):
 
 
 def main(args=None):
+    rclpy.init(args=args)
+    node = AdsbHandler()
     try:
-        with rclpy.init(args=args):
-            node = AdsbHandler()
-            rclpy.spin(node)
+        rclpy.spin(node)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':
