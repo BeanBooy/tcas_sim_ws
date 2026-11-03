@@ -30,6 +30,9 @@ void Plane::broadcast_position(aircraft_state_t& aircraft_state) const {
   message.altitude = aircraft_state.altitude;
   message.heading = aircraft_state.heading;
   message.velocity = aircraft_state.velocity;
+  message.pitch = aircraft_state.pitch;
+  message.roll = aircraft_state.roll;
+
   publisher_->publish(message);
 }
 

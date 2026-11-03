@@ -9,6 +9,8 @@ typedef struct AircraftState {
   double heading = 0.0;
   double velocity = 0.0;
   double vertical_speed = 0.0;
+  double pitch = 0.0;
+  double roll = 0.0;
 } aircraft_state_t;
 
 template <typename T>
