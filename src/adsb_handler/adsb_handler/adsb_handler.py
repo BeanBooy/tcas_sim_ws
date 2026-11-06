@@ -5,7 +5,6 @@ from rclpy.node import Node
 import socket
 import time
 import threading
-import time
 
 from interfaces.msg import Adsb
 

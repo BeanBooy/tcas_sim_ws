@@ -19,16 +19,16 @@ def generate_launch_description():
     ############## USER PLANES ##############
     # i dont think user planes should be launched via this file...
     # each user plane should be startet manually (or with a seperat launch file) on the control machine
-    plane = Node(
-            package='tcas_sim',
-            executable='user_plane',
-            name=f'u_plane_99',
-            output='screen',
-        )
-    ld.add_action(plane)
+    # plane = Node(
+    #         package='tcas_sim',
+    #         executable='user_plane',
+    #         name=f'u_plane_99',
+    #         output='screen',
+    #     )
+    # ld.add_action(plane)
 
     ############## STATIC PLANES ##############
-    static_plane_count = 2
+    static_plane_count = 3
 
     for x in range(static_plane_count):
         plane = Node(

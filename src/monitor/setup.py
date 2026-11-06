@@ -1,4 +1,6 @@
 from setuptools import find_packages, setup
+import os
+from glob import glob
 
 package_name = 'monitor'
 
@@ -10,6 +12,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'assets'), glob('assets/*.svg')),
     ],
     package_data={'': ['py.typed']},
     install_requires=['setuptools'],
@@ -25,7 +28,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'monitor = monitor.monitor:main'
+            'monitor = monitor.main:main'
         ],
     },
 )
