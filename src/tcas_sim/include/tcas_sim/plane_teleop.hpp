@@ -2,6 +2,7 @@
 #define TCAS_SIM__PLANE_TELEOP_HPP_
 
 #include <chrono>
+#include <string>
 #include <termios.h>
 
 #include "geometry_msgs/msg/twist.hpp"
@@ -21,13 +22,15 @@ private:
   void timer_callback();
 
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr publisher_;
+  std::string icao_hex_;
+  bool connected_ = false;
   rclcpp::TimerBase::SharedPtr timer_;
 
   termios original_terminal_{};
   int original_flags_ = 0;
   bool terminal_ready_ = false;
   bool quit_requested_ = false;
-  int escape_state_ = 0;  // 0 = normal, 1 = ESC, 2 = ESC [
+  int escape_state_ = 0;  
 
   double pitch_rate_ = 0.0;
   double yaw_rate_ = 0.0;
