@@ -50,49 +50,20 @@ private:
         double meters_per_deg_lon = 111320.0 * std::cos(lat_rad);
         extrap.latitude = stamped_aircraft_state.latitude.value + (delta_north / meters_per_deg_lat);
         // zero division on the poles
-        if (std::abs(meters_per_deg_lon) > 1e-5) {
+        if (std::abs(meters_per_deg_lon) > .00001) {
             extrap.longitude = stamped_aircraft_state.longitude.value + (delta_east / meters_per_deg_lon);
         } else {
             extrap.longitude = stamped_aircraft_state.longitude.value;
         }
-
-        // // TODO: remove debug log
-        // if (std::string(this->get_name()) == "s_plane_0") {
-        //     RCLCPP_INFO(this->get_logger(), "\nICAO: %s\nalt: [real: %.2f] %.2f m\nlat: [real: %.4f] %.4f\nlon: [real: %.4f] %.4f\ngs: [real: %.2f] %.2f m/s\nheading: [real: %.2f] %.2f\nvs: [real: %.2f] %.2f m/s\n", 
-        //         icao_hex.c_str(),
-        //         stamped_aircraft_state.altitude.value,
-        //         extrap.altitude,
-        //         stamped_aircraft_state.latitude.value,
-        //         extrap.latitude, 
-        //         stamped_aircraft_state.longitude.value,
-        //         extrap.longitude, 
-        //         stamped_aircraft_state.velocity.value, 
-        //         extrap.velocity, 
-        //         stamped_aircraft_state.heading.value, 
-        //         extrap.heading, 
-        //         stamped_aircraft_state.vertical_speed,
-        //         extrap.vertical_speed
-        //     );
-        // }
-
-        // ignore extrapolation
-        // extrap.heading = stamped_aircraft_state.heading.value;
-        // extrap.velocity = stamped_aircraft_state.velocity.value;
-        // extrap.vertical_speed = stamped_aircraft_state.vertical_speed.value;
-        // extrap.latitude = stamped_aircraft_state.latitude.value;
-        // extrap.longitude = stamped_aircraft_state.longitude.value;
-        // extrap.altitude = stamped_aircraft_state.altitude.value;
-
-        
         return extrap;
     }
 
     void adsb_callback(const interfaces::msg::Adsb::SharedPtr msg) {
-        // if message not for me, ignore
         if (msg->node_name != this->get_name()) {
+            // if message isn't for me, ignore
             return;
         }
-        //RCLCPP_INFO(this->get_logger(), "--> received adsb message!");
+
         is_active = msg->is_active;
         icao_hex = msg->icao;
         if (msg->altitude_valid) stamped_aircraft_state.altitude.set(msg->altitude);
@@ -103,25 +74,6 @@ private:
             stamped_aircraft_state.longitude.set(msg->longitude);
         }
         if (msg->vertical_speed_valid) stamped_aircraft_state.vertical_speed.set(msg->vertical_speed);
-
-        // TODO: remove debug log
-        // if (std::string(this->get_name()) == "s_plane_0") {
-        //     RCLCPP_INFO(this->get_logger(), "\nICAO: %s\nalt: [age: %.2f] %.2f m\nlat: [age: %.2f] %.4f\nlon: [age: %.2f] %.4f\ngs: [age: %.2f] %.2f m/s\nheading: [age: %.2f] %.2f\nvs: [age: %.2f] %.2f m/s\n", 
-        //         icao_hex.c_str(),
-        //         stamped_aircraft_state.altitude.age_sec(),
-        //         stamped_aircraft_state.altitude.value,
-        //         stamped_aircraft_state.latitude.age_sec(),
-        //         stamped_aircraft_state.latitude.value, 
-        //         stamped_aircraft_state.longitude.age_sec(),
-        //         stamped_aircraft_state.longitude.value, 
-        //         stamped_aircraft_state.velocity.age_sec(), 
-        //         stamped_aircraft_state.velocity.value, 
-        //         stamped_aircraft_state.heading.age_sec(), 
-        //         stamped_aircraft_state.heading.value, 
-        //         stamped_aircraft_state.vertical_speed.age_sec(),
-        //         stamped_aircraft_state.vertical_speed.value
-        //     );
-        // }
     }
 
 };

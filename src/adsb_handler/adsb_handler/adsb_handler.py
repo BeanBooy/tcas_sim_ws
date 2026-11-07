@@ -166,7 +166,7 @@ class AdsbHandler(Node):
                 self.get_logger().info(f"Assigned flight {icao_code} to node {node_name}")
                 return node_name
         # if no free node is availabe
-        #self.get_logger().error(f"Can't assign icao {icao_code}, too few nodes! ({len(self.plane_pool)})")
+        self.get_logger().error(f"Can't assign icao {icao_code}, too few nodes! ({len(self.plane_pool)})")
         return None
 
     def get_plane_node_from_icao(self, icao_code):
