@@ -4,7 +4,6 @@ import time
 import numpy as np
 from rclpy.node import Node
 from interfaces.msg import Pose
-from ament_index_python.packages import get_package_share_directory
 from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSplitter
 from PyQt5.QtCore import QTimer, Qt
 import pyqtgraph as pg
@@ -14,7 +13,6 @@ from pathlib import Path
 from .plane_list_item import PlaneListItem
 from .plane import Plane
 
-assets_dir = Path(get_package_share_directory('monitor')) / "assets"
 
 # global dict for plane objects
 flight_tracks = {}  # icao -> plane instance
