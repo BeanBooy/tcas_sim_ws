@@ -12,16 +12,17 @@ from pyqtgraph.Qt import QtCore
 from pathlib import Path
 
 from .plane_list_item import PlaneListItem
+from .plane import Plane
 
 assets_dir = Path(get_package_share_directory('monitor')) / "assets"
 
-# global dict for flight paths
-flight_tracks = {}
+# global dict for plane objects
+flight_tracks = {}  # icao -> plane instance
 tracks_lock = threading.Lock()
 
 class FlightMonitorNode(Node):
     def __init__(self):
-        super().__init__('pyqt_flight_monitor')
+        super().__init__('monitor')
         self.subscription = self.create_subscription(
             Pose,
             '/airspace_broadcast',
@@ -30,29 +31,104 @@ class FlightMonitorNode(Node):
         )
 
     def listener_callback(self, msg):
-        icao = msg.icao_hex
-
         with tracks_lock:
-            if icao not in flight_tracks:
-                flight_tracks[icao] = {"lats": [], "lons": [], "alts": [], "times": [], "color": None, "selected": False}
-            
-            flight_tracks[icao]["lats"].append(msg.latitude)
-            flight_tracks[icao]["lons"].append(msg.longitude)
-            flight_tracks[icao]["alts"].append(msg.altitude)
-            flight_tracks[icao]["times"].append(time.time())
-            
-            # limit size to prevent unlimited growth
-            if len(flight_tracks[icao]["lats"]) > 200:
-                flight_tracks[icao]["lats"].pop(0)
-                flight_tracks[icao]["lons"].pop(0)
-                flight_tracks[icao]["alts"].pop(0)
-                flight_tracks[icao]["times"].pop(0)
+            if msg.icao_hex not in flight_tracks:
+                flight_tracks[msg.icao_hex] = Plane(msg.icao_hex)
+            # add position
+            flight_tracks[msg.icao_hex].add_position(msg.latitude, msg.longitude, msg.altitude, time.time())
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, node):
+    def __init__(self):
         super().__init__()
-        self.node = node
+        # load ui
+        self.init_ui()
+        # capture global start time for altitude graph
+        self.global_start_time = time.time()
+        # set colors for the flights
+        self.color_palette = ['#ff4d4d', '#2ecc71', '#3498db', 
+                              '#f1c40f', '#9b59b6', '#e67e22', 
+                              '#1abc9c', '#e84393', '#00cec9']
+        self.color_index = 0
+        # memory for ui elements (widgets and curves)
+        self.plane_items = {}  # icao -> PlaneListItem
+        self.latlon_curves = {}  # icao -> pyqtgraph plot curve
+        self.alt_curves = {}  # icao -> pyqtgraph plot curve
+        # timer for ui updates
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_loop)
+        self.timer.start(100)
+
+    def update_loop(self):
+        with tracks_lock:
+            for icao, plane in flight_tracks.items():
+                # if plane is new assign color and create list element
+                if plane.color is None:
+                    # assign color
+                    plane.color = self.color_palette[self.color_index % len(self.color_palette)]
+                    self.color_index += 1
+                    # create sidebar list element
+                    item = PlaneListItem(icao, color_hex=plane.color)
+                    item.toggled.connect(self.on_plane_toggled)
+                    item.deleted.connect(self.on_plane_deleted)
+                    self.sidebar_layout.insertWidget(self.sidebar_layout.count() - 1, item)
+                    self.plane_items[icao] = item
+
+                # set update time for sidebar list element
+                if icao in self.plane_items and plane.times:
+                    self.plane_items[icao].last_update_time = plane.times[-1]
+
+                # update lat/lon graph (always)
+                point_sizes = [0] * (len(plane.lons) - 1) + [10]
+                if icao not in self.latlon_curves and plane.lons:
+                    self.latlon_curves[icao] = self.plot_latlon.plot(
+                        plane.lons, plane.lats,
+                        pen=pg.mkPen(color=plane.color, width=2),
+                        symbol='o', symbolSize=point_sizes, symbolBrush=None, symbolPen=pg.mkPen(color=plane.color, width=2)
+                    )
+                elif icao in self.latlon_curves:
+                    self.latlon_curves[icao].setData(plane.lons, plane.lats, symbolSize=point_sizes)
+
+                # update alt curves (only if selected)
+                if plane.selected:
+                    rel_times = [t - self.global_start_time for t in plane.times] if plane.times else []
+                    if icao not in self.alt_curves and plane.alts:
+                        self.alt_curves[icao] = self.plot_alt.plot(
+                            rel_times, plane.alts,
+                            pen=pg.mkPen(color=plane.color, width=2)
+                        )
+                    elif icao in self.alt_curves:
+                        self.alt_curves[icao].setData(rel_times, plane.alts)
+
+    def on_plane_toggled(self, icao, checked):
+        with tracks_lock:
+            if icao in flight_tracks:
+                flight_tracks[icao].selected = checked
+                if not checked and icao in self.alt_curves:
+                    self.plot_alt.removeItem(self.alt_curves[icao])
+                    del self.alt_curves[icao]
+
+    def on_plane_deleted(self, icao):
+        with tracks_lock:
+            # delete from global tracks
+            if icao in flight_tracks:
+                del flight_tracks[icao]
+            # delete lat/lon curve
+            if icao in self.latlon_curves:
+                self.plot_latlon.removeItem(self.latlon_curves[icao])
+                del self.latlon_curves[icao]
+            # delete alt curve
+            if icao in self.alt_curves:
+                self.plot_alt.removeItem(self.alt_curves[icao])
+                del self.alt_curves[icao]
+            # delete list item from sidebar
+            if icao in self.plane_items:
+                item = self.plane_items[icao]
+                self.sidebar_layout.removeWidget(item)
+                item.deleteLater()
+                del self.plane_items[icao]
+
+    def init_ui(self):
         self.setWindowTitle("Airspace Monitor")
         self.resize(900, 700)
 
@@ -71,20 +147,6 @@ class MainWindow(QMainWindow):
                 height: 4px; /* Dicke der horizontalen Trennlinie */
             }
         """)
-
-        # global start time for altitude graph
-        self.global_start_time = time.time()
-
-        self.color_palette = [
-            '#ff4d4d', '#2ecc71', '#3498db', '#f1c40f', '#9b59b6', 
-            '#e67e22', '#1abc9c', '#e84393', '#00cec9', '#fdcb6e'
-        ]
-        self.color_index = 0
-
-        # memory for all the widgets and curevs
-        self.plane_items = {}  # icao -> PlaneListItem
-        self.latlon_curves = {}  # icao -> pyqtgraph plot curve
-        self.alt_curves = {}  # icao -> pyqtgraph plot curve
 
         # central layout
         central_widget = QWidget()
@@ -118,6 +180,7 @@ class MainWindow(QMainWindow):
         self.plot_latlon.setLabel('bottom', 'Longitude (°)')
         self.plot_latlon.showGrid(x=True, y=True)
         self.plot_latlon.getPlotItem().getViewBox().setMouseMode(pg.ViewBox.PanMode)
+        self.plot_latlon.setAspectLocked(True, ratio=1.0)
         top_layout.addWidget(self.plot_latlon)
 
         # bottom graph (alt)
@@ -146,7 +209,7 @@ class MainWindow(QMainWindow):
         # link layout
         main_layout.addWidget(main_splitter)
 
-        # reference point (Ingolstadt)
+        # draw reference point (Ingolstadt)
         lat_center = 48.7667
         lon_center = 11.4333
         self.plot_latlon.plot([lon_center], [lat_center], pen=None, symbol='o', symbolSize=10, symbolBrush="#AAA")
@@ -154,93 +217,6 @@ class MainWindow(QMainWindow):
         self.draw_circle(lat_center, lon_center, 20)
         self.draw_circle(lat_center, lon_center, 30)
 
-        # timer for ui updates & ros spin
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_loop)
-        self.timer.start(100)
-   
-       
-
-    def update_loop(self):
-        try:
-            # non-blocking ros tick (fetches new messages)
-            rclpy.spin_once(self.node, timeout_sec=0)
-        except Exception:
-            pass
-        
-        with tracks_lock:
-            for icao, track in flight_tracks.items():
-                # if new plane: set color and create list elements
-                if track["color"] is None:
-                    track["color"] = self.color_palette[self.color_index % len(self.color_palette)]
-                    self.color_index += 1
-
-                    # add new list element to sidebar
-                    item = PlaneListItem(icao, color_hex=track["color"])
-                    item.toggled.connect(self.on_plane_toggled)
-                    item.deleted.connect(self.on_plane_deleted)
-                    
-                    self.sidebar_layout.insertWidget(self.sidebar_layout.count() - 1, item)
-                    self.plane_items[icao] = item
-
-                # set new update time
-                if icao in self.plane_items and track["times"]:
-                    self.plane_items[icao].last_update_time = track["times"][-1]
-
-                # update lat/lon curves
-                lons, lats = track["lons"], track["lats"]
-                sizes = [0] * (len(lons) - 1) + [10]
-                if icao not in self.latlon_curves and lons:
-                    self.latlon_curves[icao] = self.plot_latlon.plot(
-                        lons, lats,
-                        pen=pg.mkPen(color=track["color"], width=2),
-                        symbol='o', symbolSize=sizes, symbolBrush=None, symbolPen=pg.mkPen(color=track["color"], width=2)
-                    )
-                elif icao in self.latlon_curves:
-                    self.latlon_curves[icao].setData(lons, lats, symbolSize=sizes)
-
-                # update alt curves (only if selected)
-                if track["selected"]:
-                    times, alts = track["times"], track["alts"]
-                    # relative timestamp for first data point
-                    rel_times = [t - self.global_start_time for t in times] if times else []
-
-                    if icao not in self.alt_curves and alts:
-                        self.alt_curves[icao] = self.plot_alt.plot(
-                            rel_times, alts,
-                            pen=pg.mkPen(color=track["color"], width=2)
-                        )
-                    elif icao in self.alt_curves:
-                        self.alt_curves[icao].setData(rel_times, alts)
-
-    def on_plane_toggled(self, icao, checked):
-        with tracks_lock:
-            if icao in flight_tracks:
-                flight_tracks[icao]["selected"] = checked
-                # if not checked, remove alt curve
-                if not checked and icao in self.alt_curves:
-                    self.plot_alt.removeItem(self.alt_curves[icao])
-                    del self.alt_curves[icao]
-
-    def on_plane_deleted(self, icao):
-        with tracks_lock:
-            # delete from global tracks
-            if icao in flight_tracks:
-                del flight_tracks[icao]
-            # delete lat/lon curve
-            if icao in self.latlon_curves:
-                self.plot_latlon.removeItem(self.latlon_curves[icao])
-                del self.latlon_curves[icao]
-            # delete alt curve
-            if icao in self.alt_curves:
-                self.plot_alt.removeItem(self.alt_curves[icao])
-                del self.alt_curves[icao]
-            # delete list item from sidebar
-            if icao in self.plane_items:
-                item = self.plane_items[icao]
-                self.sidebar_layout.removeWidget(item)
-                item.deleteLater()
-                del self.plane_items[icao]
 
     def draw_circle(self, lat_center, lon_center, radius_km):
         # convert meters to degrees (approximate)
@@ -256,3 +232,4 @@ class MainWindow(QMainWindow):
         text_item.setAnchor((0.5, 0))
         text_item.setPos(lon_center, lat_center - d_lat)
         self.plot_latlon.addItem(text_item)
+
