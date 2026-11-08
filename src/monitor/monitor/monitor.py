@@ -24,11 +24,11 @@ class FlightMonitorNode(Node):
         self.subscription = self.create_subscription(
             Pose,
             '/airspace_broadcast',
-            self.listener_callback,
+            self.ab_callback,
             10
         )
 
-    def listener_callback(self, msg):
+    def ab_callback(self, msg):
         with tracks_lock:
             if msg.icao_hex not in flight_tracks:
                 flight_tracks[msg.icao_hex] = Plane(msg.icao_hex)
