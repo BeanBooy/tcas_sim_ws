@@ -12,7 +12,7 @@ def generate_launch_description():
     plane = Node(
             package='tcas_sim',
             executable='user_plane',
-            name=f'u_plane_99',
+            name=f'u_plane',
             output='screen',
             parameters=[{
                 'icao_hex': icao
@@ -20,7 +20,7 @@ def generate_launch_description():
         )
     ld.add_action(plane)
 
-    ############## TELEOP ##############
+    ############## TELEOP (in seperat terminal) ##############
     teleop = ExecuteProcess(
         cmd=[
             'gnome-terminal', '--', 

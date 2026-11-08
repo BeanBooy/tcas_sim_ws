@@ -8,7 +8,6 @@ from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLab
 from PyQt5.QtCore import QTimer, Qt
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore
-from pathlib import Path
 
 from .plane_list_item import PlaneListItem
 from .plane import Plane
@@ -127,6 +126,7 @@ class MainWindow(QMainWindow):
                 del self.plane_items[icao]
 
     def init_ui(self):
+        pg.setConfigOptions(antialias=True, useOpenGL=False) 
         self.setWindowTitle("Airspace Monitor")
         self.resize(900, 700)
 
@@ -178,7 +178,7 @@ class MainWindow(QMainWindow):
         self.plot_latlon.setLabel('bottom', 'Longitude (°)')
         self.plot_latlon.showGrid(x=True, y=True)
         self.plot_latlon.getPlotItem().getViewBox().setMouseMode(pg.ViewBox.PanMode)
-        self.plot_latlon.setAspectLocked(True, ratio=1.0)
+        self.plot_latlon.getViewBox().setAspectLocked(True, ratio=1.0)
         top_layout.addWidget(self.plot_latlon)
 
         # bottom graph (alt)
