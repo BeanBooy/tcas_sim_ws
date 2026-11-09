@@ -10,7 +10,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "interfaces/msg/pose.hpp"
-#include "tcas_sim/plane_node.hpp"
+#include "tcas_sim/plane.hpp"
 #include "interfaces/srv/tele_op.hpp"
 
 

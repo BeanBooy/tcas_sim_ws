@@ -5,7 +5,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "interfaces/msg/adsb.hpp"
-#include "tcas_sim/plane_node.hpp"
+#include "tcas_sim/plane.hpp"
 
 using namespace std::chrono_literals;
 

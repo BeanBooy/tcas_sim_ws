@@ -11,7 +11,7 @@ find_package(rclcpp REQUIRED)
 find_package(interfaces REQUIRED)
 
 # --- Executable: static_plane ---
-add_executable(static_plane src/static_plane.cpp src/plane_node.cpp)
+add_executable(static_plane src/static_plane.cpp src/plane.cpp)
 target_include_directories(static_plane PRIVATE include)
 target_compile_features(static_plane PRIVATE cxx_std_17)
 target_link_libraries(static_plane PUBLIC
@@ -20,7 +20,7 @@ target_link_libraries(static_plane PUBLIC
 )
 
 # --- Executable: user_plane ---
-add_executable(user_plane src/user_plane.cpp src/plane_node.cpp)
+add_executable(user_plane src/user_plane.cpp src/plane.cpp)
 target_include_directories(user_plane PRIVATE include)
 target_compile_features(user_plane PRIVATE cxx_std_17)
 target_link_libraries(user_plane PUBLIC
