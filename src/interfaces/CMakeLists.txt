@@ -12,7 +12,10 @@ find_package(std_msgs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Adsb.msg"
   "msg/Pose.msg"
+  "srv/TeleOp.srv"
   DEPENDENCIES std_msgs
 )
+
+ament_export_dependencies(rosidl_default_runtime)
 
 ament_package()

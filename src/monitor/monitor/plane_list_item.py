@@ -1,5 +1,5 @@
 from ament_index_python.packages import get_package_share_directory
-from PyQt5.QtWidgets import QHBoxLayout, QCheckBox, QPushButton, QFrame, QLabel
+from PyQt5.QtWidgets import QHBoxLayout, QPushButton, QFrame, QLabel
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QIcon
 from pathlib import Path

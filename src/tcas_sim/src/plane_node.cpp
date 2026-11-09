@@ -18,7 +18,6 @@ Plane::Plane() : Node("plane_X") {
     500ms, std::bind(&Plane::timer_callback, this)
   );
 
-  RCLCPP_INFO(this->get_logger(), "Node %s initialized...", this->get_name());
 }
 
 

@@ -6,7 +6,7 @@ from launch.actions import ExecuteProcess
 def generate_launch_description():
     ld = LaunchDescription()
 
-    icao = "ABCDEF"
+    icao = "A1b2C3"
 
     ############## USER PLANE ##############
     plane = Node(
@@ -15,7 +15,10 @@ def generate_launch_description():
             name=f'u_plane',
             output='screen',
             parameters=[{
-                'icao_hex': icao
+                'icao_hex': icao,
+                'start_latitude': 48.6,
+                'start_longitude': 11.2,
+                'start_velocity': 200.0
             }]
         )
     ld.add_action(plane)

@@ -1,53 +1,54 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.8)
 project(tcas_sim)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# Find dependencies (removed rosidl and std_msgs since messages live in 'interfaces' now)
+# Pakete finden
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(geometry_msgs REQUIRED)
 find_package(interfaces REQUIRED)
 
-include_directories(include)
-
-# Build executables (bundled with base plane_node)
+# --- Executable: static_plane ---
 add_executable(static_plane src/static_plane.cpp src/plane_node.cpp)
-add_executable(user_plane src/user_plane.cpp src/plane_node.cpp)
-add_executable(plane_teleop src/plane_teleop.cpp)
-
-foreach(target static_plane user_plane)
-  target_include_directories(${target} PRIVATE include)
-  target_link_libraries(${target} PUBLIC
-          rclcpp::rclcpp
-          ${interfaces_TARGETS}
-          "${cpp_typesupport_target}"
-  )
-endforeach()
-
-# Install launch files
-
-target_link_libraries(user_plane PRIVATE ${geometry_msgs_TARGETS})
-target_compile_features(user_plane PRIVATE cxx_std_17)
-target_include_directories(plane_teleop PRIVATE include)
-target_compile_features(plane_teleop PRIVATE cxx_std_17)
-target_link_libraries(plane_teleop PRIVATE
-        rclcpp::rclcpp
-        ${geometry_msgs_TARGETS}
+target_include_directories(static_plane PRIVATE include)
+target_compile_features(static_plane PRIVATE cxx_std_17)
+target_link_libraries(static_plane PUBLIC
+  ${interfaces_TARGETS}
+  rclcpp::rclcpp
 )
 
-# for launch files
+# --- Executable: user_plane ---
+add_executable(user_plane src/user_plane.cpp src/plane_node.cpp)
+target_include_directories(user_plane PRIVATE include)
+target_compile_features(user_plane PRIVATE cxx_std_17)
+target_link_libraries(user_plane PUBLIC
+  ${interfaces_TARGETS}
+  rclcpp::rclcpp
+)
+
+# --- Executable: plane_teleop ---
+add_executable(plane_teleop src/plane_teleop.cpp)
+target_include_directories(plane_teleop PRIVATE include)
+target_compile_features(plane_teleop PRIVATE cxx_std_17)
+target_link_libraries(plane_teleop PUBLIC
+  ${interfaces_TARGETS}
+  rclcpp::rclcpp
+)
+
+# --- Installation ---
+
+# Launch-Dateien installieren
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 
-# Install header files
+# Header-Dateien installieren (falls extern benötigt)
 install(
   DIRECTORY include/
   DESTINATION include
 )
 
-# Install executables
+# Executables installieren
 install(TARGETS
         static_plane
         user_plane

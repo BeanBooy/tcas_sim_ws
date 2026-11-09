@@ -1,6 +1,3 @@
-//
-// Created by calvinbia on 10/31/26.
-//
 #include <algorithm>
 #include <chrono>
 #include <memory>
@@ -14,51 +11,47 @@
 #include "rclcpp/rclcpp.hpp"
 #include "interfaces/msg/pose.hpp"
 #include "tcas_sim/plane_node.hpp"
-#include "geometry_msgs/msg/twist.hpp"
-
+#include "interfaces/srv/tele_op.hpp"
 
 
 using namespace std::chrono_literals;
 
+typedef struct TeleOpCommand {
+    double speed;
+    double roll;
+    double pitch;
+    double yaw;
+} key_input_t;
+
 class UserPlane : public Plane {
 public:
-    UserPlane()
-    : Plane()
-    {
-        RCLCPP_INFO(this->get_logger(), "User Plane.");
-
+    UserPlane() : Plane() {
+        // read start parameters
         aircraft_state.latitude = this->declare_parameter<double>("start_latitude", 48.0);
         aircraft_state.longitude = this->declare_parameter<double>("start_longitude", 11.0);
         aircraft_state.altitude = this->declare_parameter<double>("start_altitude", 1000.0);
         aircraft_state.heading = this->declare_parameter<double>("start_heading", 0.0);
-
+        aircraft_state.velocity = this->declare_parameter<double>("start_velocity", 0.0);
         icao_hex = this->declare_parameter<std::string>("icao_hex", "");
-        std::transform(icao_hex.begin(), icao_hex.end(), icao_hex.begin(),
-            [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-
-        const std::string command_topic = "/user_plane/" + icao_hex + "/cmd_vel";
-
+        // make icao upper case
+        std::transform(icao_hex.begin(), icao_hex.end(), icao_hex.begin(), ::toupper);
+        // subscribe to airspace broadcast
         subscription_ = this->create_subscription<interfaces::msg::Pose>(
-                        broadcast_topic, 10,
-                        std::bind(&UserPlane::broadcast_callback, this, std::placeholders::_1)
-                        );
+            broadcast_topic, 10,
+            std::bind(&UserPlane::broadcast_callback, this, std::placeholders::_1)
+        );
+        // setup service function for receiving keyboard inputs 
+        server_ = this->create_service<interfaces::srv::TeleOp>("send_new_keys/" + icao_hex,
+            std::bind(&UserPlane::handle_new_keys, this, std::placeholders::_1, std::placeholders::_2)
+        );
+        // done :)
+        RCLCPP_INFO(this->get_logger(), "Plane %s listening for control...", icao_hex.c_str());
         this->is_active = true;
-        command_subscription_ = this->create_subscription<geometry_msgs::msg::Twist>(
-                        command_topic, 10,
-                        std::bind(&UserPlane::command_callback, this, std::placeholders::_1)
-                        );
-
-
-        timer_->cancel();
-        timer_ = this->create_wall_timer(50ms, std::bind(&UserPlane::timer_callback, this));
-        last_update_ = std::chrono::steady_clock::now();
-        RCLCPP_INFO(this->get_logger(), "Plane %s listening for control on %s",
-            icao_hex.c_str(), command_topic.c_str());
     }
 private:
+    rclcpp::Service<interfaces::srv::TeleOp>::SharedPtr server_;
     rclcpp::Subscription<interfaces::msg::Pose>::SharedPtr subscription_;
-    rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr command_subscription_;
-    geometry_msgs::msg::Twist command_{};
+    key_input_t command_{};
     std::chrono::steady_clock::time_point last_update_{};
     std::chrono::steady_clock::time_point last_command_{};
 
@@ -132,8 +125,14 @@ private:
         }
     }
 
-    void command_callback(const geometry_msgs::msg::Twist::SharedPtr msg) {
-        command_ = *msg;
+    void handle_new_keys(const std::shared_ptr<interfaces::srv::TeleOp::Request> request, 
+        std::shared_ptr<interfaces::srv::TeleOp::Response> response) {
+        // copy values to command
+        command_.speed = request->speed;
+        command_.roll = request->roll;
+        command_.pitch = request->pitch;
+        command_.yaw = request->yaw;
+        response->ret = 420;
         last_command_ = std::chrono::steady_clock::now();
     }
 
@@ -145,10 +144,10 @@ private:
         remove_old_traffic(now);
 
         if (now - last_command_ > 500ms) {
-            command_.linear.x = 0.0;
-            command_.angular.x = 0.0;
-            command_.angular.y = 0.0;
-            command_.angular.z = 0.0;
+            command_.speed = 0.0;
+            command_.roll = 0.0;
+            command_.pitch = 0.0;
+            command_.yaw = 0.0;
         }
 
         double pi = 3.141592653589793;
@@ -157,17 +156,17 @@ private:
 
 
         aircraft_state.pitch = std::clamp(
-            aircraft_state.pitch + command_.angular.y * degrees_per_radian * dt,
+            aircraft_state.pitch + command_.pitch * degrees_per_radian * dt,
             -80.0, 80.0);
-        aircraft_state.roll += command_.angular.x * degrees_per_radian * dt;
+        aircraft_state.roll += command_.roll * degrees_per_radian * dt;
         if (aircraft_state.roll > 180.0) {aircraft_state.roll -= 360.0;}
         if (aircraft_state.roll < -180.0) {aircraft_state.roll += 360.0;}
 
 
         aircraft_state.heading = std::fmod(
-            aircraft_state.heading - command_.angular.z * degrees_per_radian * dt + 360.0,
+            aircraft_state.heading - command_.yaw * degrees_per_radian * dt + 360.0,
             360.0);
-        aircraft_state.velocity = std::max(0.0, command_.linear.x);
+        aircraft_state.velocity = std::max(0.0, command_.speed);
 
         double pitch_rad = aircraft_state.pitch * pi / 180.0;
         double heading_rad = aircraft_state.heading * pi / 180.0;

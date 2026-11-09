@@ -5,8 +5,8 @@
 #include <string>
 #include <termios.h>
 
-#include "geometry_msgs/msg/twist.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "interfaces/srv/tele_op.hpp"
 
 class PlaneTeleop : public rclcpp::Node
 {
@@ -21,7 +21,8 @@ private:
   void handle_key(char key);
   void timer_callback();
 
-  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr publisher_;
+  rclcpp::Client<interfaces::srv::TeleOp>::SharedPtr client_;
+
   std::string icao_hex_;
   bool connected_ = false;
   rclcpp::TimerBase::SharedPtr timer_;
