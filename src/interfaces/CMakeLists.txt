@@ -10,8 +10,9 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/Adsb.msg"
-  "msg/Pose.msg"
+        "msg/Adsb.msg"
+        "msg/Pose.msg"
+        "msg/Resolution.msg"
   DEPENDENCIES std_msgs
 )
 
