@@ -177,8 +177,8 @@ private:
         double ta_vertical = 300.0;
         double ra_vertical = 150.0;
         double pi = 3.141592653589793;
-        double collision_horizontal = 150.0;
-        double collision_vertical = 100.0;
+        double collision_horizontal = 75.0;
+        double collision_vertical = 50.0;
 
         double meters_per_degree = 111320.0;
 
@@ -339,6 +339,7 @@ private:
             }
 
             if (new_advisory == Advisory::COLLISION) {
+                this->is_active = false;
                 RCLCPP_ERROR(
                     this->get_logger(),
                     "TCAS [%s]: COLLISION proximity with %s",

@@ -14,7 +14,7 @@ def generate_launch_description():
             '-p', 'start_longitude:=11.4300',
             '-p', 'start_altitude:=1000.0',
             '-p', 'start_heading:=0.0',
-            '-p', 'start_velocity:=50.0'
+            '-p', 'start_velocity:=190.0'
         ],
         output='screen'
     )
@@ -41,7 +41,7 @@ def generate_launch_description():
             '-p', 'start_longitude:=11.5354',
             '-p', 'start_altitude:=1000.0',
             '-p', 'start_heading:=270.0',
-            '-p', 'start_velocity:=50.0'
+            '-p', 'start_velocity:=190.0'
         ],
         output='screen'
     )
