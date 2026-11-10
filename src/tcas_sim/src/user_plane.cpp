@@ -10,6 +10,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "interfaces/msg/pose.hpp"
+#include "interfaces/msg/resolution.hpp"
 #include "tcas_sim/plane.hpp"
 #include "interfaces/srv/tele_op.hpp"
 
@@ -25,43 +26,147 @@ typedef struct TeleOpCommand {
 
 class UserPlane : public Plane {
 public:
-    UserPlane() : Plane() {
-        // read start parameters
+    UserPlane()
+    : Plane()
+    {
+        RCLCPP_INFO(this->get_logger(), "User Plane.");
+
         aircraft_state.latitude = this->declare_parameter<double>("start_latitude", 48.0);
         aircraft_state.longitude = this->declare_parameter<double>("start_longitude", 11.0);
         aircraft_state.altitude = this->declare_parameter<double>("start_altitude", 1000.0);
         aircraft_state.heading = this->declare_parameter<double>("start_heading", 0.0);
-        aircraft_state.velocity = this->declare_parameter<double>("start_velocity", 0.0);
+        aircraft_state.velocity = this->declare_parameter<double>("start_velocity", 30.0);
+
+        if (aircraft_state.velocity > 0.0) {
+            this->has_init_velocity = true;
+        }
+
         icao_hex = this->declare_parameter<std::string>("icao_hex", "");
         // make icao upper case
         std::transform(icao_hex.begin(), icao_hex.end(), icao_hex.begin(), ::toupper);
         // subscribe to airspace broadcast
+        //std::transform(icao_hex.begin(), icao_hex.end(), icao_hex.begin(),
+        //    [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+
+        const std::string command_topic = "/user_plane/" + icao_hex + "/cmd_vel";
+
+        resolution_publisher_ = this->create_publisher<interfaces::msg::Resolution>(
+            "/tcas/resolutions", 10);
+
+        resolution_subscription_ = this->create_subscription<interfaces::msg::Resolution>("/tcas/resolutions",
+                                    10,
+                                    std::bind(&UserPlane::resolution_callback,this,std::placeholders::_1)
+                                    );
+
         subscription_ = this->create_subscription<interfaces::msg::Pose>(
             broadcast_topic, 10,
             std::bind(&UserPlane::broadcast_callback, this, std::placeholders::_1)
         );
-        // setup service function for receiving keyboard inputs 
+        // setup service function for receiving keyboard inputs
         server_ = this->create_service<interfaces::srv::TeleOp>("send_new_keys/" + icao_hex,
             std::bind(&UserPlane::handle_new_keys, this, std::placeholders::_1, std::placeholders::_2)
         );
         // done :)
         RCLCPP_INFO(this->get_logger(), "Plane %s listening for control...", icao_hex.c_str());
         this->is_active = true;
+        RCLCPP_INFO(
+            this->get_logger(),
+            "Plane vel: %f with init vel: %s",
+            aircraft_state.velocity,
+            this->has_init_velocity ? "true" : "false"
+        );
     }
 private:
     rclcpp::Service<interfaces::srv::TeleOp>::SharedPtr server_;
     rclcpp::Subscription<interfaces::msg::Pose>::SharedPtr subscription_;
     key_input_t command_{};
+    rclcpp::Publisher<interfaces::msg::Resolution>::SharedPtr resolution_publisher_;
+    rclcpp::Subscription<interfaces::msg::Resolution>::SharedPtr resolution_subscription_;
     std::chrono::steady_clock::time_point last_update_{};
     std::chrono::steady_clock::time_point last_command_{};
+    bool has_init_velocity = false;
 
-    enum class Advisory { CLEAR, TA, RA };
+    enum class Advisory { CLEAR, TA, RA, COLLISION };
+    enum class Resolution : uint8_t { NONE = 0, CLIMB = 1, DESCEND = 2 };
 
     struct TrafficTrack {
         Advisory advisory = Advisory::CLEAR;
+        Resolution resolution = Resolution::NONE;
         std::chrono::steady_clock::time_point last_seen;
     };
     std::map<std::string, TrafficTrack> traffic_;
+
+    Resolution choose_resolution(const std::string & other_id) const {
+        if (icao_hex > other_id) {
+            return Resolution::CLIMB;
+        }
+        else {
+            return Resolution::DESCEND;
+        }
+    }
+
+    void publish_resolution(const std::string & other_id, Resolution resolution)
+    {
+        interfaces::msg::Resolution msg;
+
+        msg.source_icao = icao_hex;
+        msg.target_icao = other_id;
+
+        msg.resolution = static_cast<uint8_t>(resolution);
+
+        resolution_publisher_->publish(msg);
+    }
+    void resolution_callback(
+    const interfaces::msg::Resolution::SharedPtr msg)
+    {
+        // Only accept instructions addressed to this airplane.
+        if (msg->target_icao != icao_hex) {
+            return;
+        }
+
+        // Ignore messages sent by ourselves.
+        if (msg->source_icao == icao_hex) {
+            return;
+        }
+
+        // Read the received resolution.
+        Resolution received =
+            static_cast<Resolution>(msg->resolution);
+
+        // Store the resolution for this specific aircraft.
+        auto & track = traffic_[msg->source_icao];
+        track.last_seen = std::chrono::steady_clock::now();
+
+        // Ignore repeated identical instructions.
+        if (track.resolution == received) {
+            return;
+        }
+
+        track.resolution = received;
+
+        if (received == Resolution::CLIMB) {
+            RCLCPP_WARN(
+                this->get_logger(),
+                "TCAS [%s]: RA with %s - CLIMB",
+                icao_hex.c_str(),
+                msg->source_icao.c_str());
+        }
+        else if (received == Resolution::DESCEND) {
+            RCLCPP_WARN(
+                this->get_logger(),
+                "TCAS [%s]: RA with %s - DESCEND",
+                icao_hex.c_str(),
+                msg->source_icao.c_str());
+        }
+        else {
+            RCLCPP_INFO(
+                this->get_logger(),
+                "TCAS [%s]: Resolution from %s ended",
+                icao_hex.c_str(),
+                msg->source_icao.c_str());
+        }
+    }
+
 
     Advisory predict_conflict(const interfaces::msg::Pose & other) const {
 
@@ -72,7 +177,12 @@ private:
         double ta_vertical = 300.0;
         double ra_vertical = 150.0;
         double pi = 3.141592653589793;
+        double collision_horizontal = 150.0;
+        double collision_vertical = 100.0;
+
         double meters_per_degree = 111320.0;
+
+
 
 
         const double lat_rad = aircraft_state.latitude * pi / 180.0;
@@ -81,24 +191,23 @@ private:
             meters_per_degree * std::cos(lat_rad);
         const double up = other.altitude - aircraft_state.altitude;
 
+        if (std::hypot(north, east) < collision_horizontal && std::abs(up) < collision_vertical) {
+            return Advisory::COLLISION;
+        }
 
         double own_heading = aircraft_state.heading * pi / 180.0;
         double other_heading = other.heading * pi / 180.0;
-        double own_horizontal_speed = aircraft_state.velocity *
-            std::cos(aircraft_state.pitch * pi / 180.0);
-        double other_horizontal_speed = other.velocity *
-            std::cos(other.pitch * pi / 180.0);
-        double north_speed = other_horizontal_speed * std::cos(other_heading) -
-            own_horizontal_speed * std::cos(own_heading);
-        double east_speed = other_horizontal_speed * std::sin(other_heading) -
-            own_horizontal_speed * std::sin(own_heading);
+        double own_horizontal_speed = aircraft_state.velocity * std::cos(aircraft_state.pitch * pi / 180.0);
+        double other_horizontal_speed = other.velocity * std::cos(other.pitch * pi / 180.0);
+        double north_speed = other_horizontal_speed * std::cos(other_heading) - own_horizontal_speed * std::cos(own_heading);
+        double east_speed = other_horizontal_speed * std::sin(other_heading) - own_horizontal_speed * std::sin(own_heading);
         double up_speed = other.vertical_speed - aircraft_state.vertical_speed;
 
         bool ta_detected = false;
 
         for (double t = 0.0; t <= ta_horizon; t += 0.5) {
-            const double horizontal = std::hypot(north + north_speed * t,
-                                                  east + east_speed * t);
+            const double horizontal = std::hypot(north + north_speed * t, east + east_speed * t);
+
             const double vertical = std::abs(up + up_speed * t);
             if (t <= ra_horizon && horizontal < ra_horizontal && vertical < ra_vertical) {
                 return Advisory::RA;
@@ -118,6 +227,10 @@ private:
                         "TCAS [%s]: lost track of %s (no recent broadcasts)",
                         icao_hex.c_str(), it->first.c_str());
                 }
+                //Could cause issues here
+                if (it->second.advisory == Advisory::RA) {
+                    publish_resolution(it->first, Resolution::NONE);
+                }
                 it = traffic_.erase(it);
             } else {
                 ++it;
@@ -125,7 +238,7 @@ private:
         }
     }
 
-    void handle_new_keys(const std::shared_ptr<interfaces::srv::TeleOp::Request> request, 
+    void handle_new_keys(const std::shared_ptr<interfaces::srv::TeleOp::Request> request,
         std::shared_ptr<interfaces::srv::TeleOp::Response> response) {
         // copy values to command
         command_.speed = request->speed;
@@ -166,52 +279,89 @@ private:
         aircraft_state.heading = std::fmod(
             aircraft_state.heading - command_.yaw * degrees_per_radian * dt + 360.0,
             360.0);
-        aircraft_state.velocity = std::max(0.0, command_.speed);
+        if (!this->has_init_velocity || command_.speed > 0.0) {
+            aircraft_state.velocity = std::max(0.0, command_.speed);
+        }
 
         double pitch_rad = aircraft_state.pitch * pi / 180.0;
         double heading_rad = aircraft_state.heading * pi / 180.0;
         double distance = aircraft_state.velocity * dt;
         double horizontal_distance = distance * std::cos(pitch_rad);
-        aircraft_state.latitude += horizontal_distance * std::cos(heading_rad)
-            / meters_per_degree;
-        double longitude_scale = std::max(
-            0.01, std::abs(std::cos(aircraft_state.latitude * pi / 180.0)));
-        aircraft_state.longitude += horizontal_distance * std::sin(heading_rad)
-            / (meters_per_degree * longitude_scale);
+        aircraft_state.latitude += horizontal_distance * std::cos(heading_rad) / meters_per_degree;
+        double longitude_scale = std::max(0.01, std::abs(std::cos(aircraft_state.latitude * pi / 180.0)));
+        aircraft_state.longitude += horizontal_distance * std::sin(heading_rad) / (meters_per_degree * longitude_scale);
         aircraft_state.altitude += distance * std::sin(pitch_rad);
         aircraft_state.vertical_speed = aircraft_state.velocity * std::sin(pitch_rad);
 
         return aircraft_state;
     }
 
-    void broadcast_callback(const interfaces::msg::Pose::SharedPtr msg) {
-        // Do not assess our own broadcast or unidentified traffic.
+    void broadcast_callback(const interfaces::msg::Pose::SharedPtr msg){
         if (msg->icao_hex.empty() || msg->icao_hex == icao_hex) {
             return;
         }
 
         const auto now = std::chrono::steady_clock::now();
         const Advisory new_advisory = predict_conflict(*msg);
+
         auto & track = traffic_[msg->icao_hex];
         track.last_seen = now;
 
 
-        if (new_advisory != track.advisory) {
-            if (new_advisory == Advisory::RA) {
-                RCLCPP_WARN(this->get_logger(),
-                    "TCAS [%s]: RA - predicted conflict with %s",
-                    icao_hex.c_str(), msg->icao_hex.c_str());
-            } else if (new_advisory == Advisory::TA) {
-                RCLCPP_WARN(this->get_logger(),
-                    "TCAS [%s]: TA - traffic %s approaching",
-                    icao_hex.c_str(), msg->icao_hex.c_str());
-            } else {
-                RCLCPP_INFO(this->get_logger(),
-                    "TCAS [%s]: CLEAR of %s",
-                    icao_hex.c_str(), msg->icao_hex.c_str());
-            }
-            track.advisory = new_advisory;
+        if (new_advisory == track.advisory) {
+            return;
         }
+
+        if (new_advisory == Advisory::RA) {
+
+            // Determine what our own airplane should do.
+            Resolution own_resolution =
+                choose_resolution(msg->icao_hex);
+
+            // Tell the OTHER airplane to do the opposite.
+            Resolution other_resolution =
+                (own_resolution == Resolution::CLIMB)
+                    ? Resolution::DESCEND
+                    : Resolution::CLIMB;
+
+            publish_resolution(msg->icao_hex, other_resolution);
+
+            RCLCPP_WARN(
+                this->get_logger(),
+                "TCAS [%s]: RA with %s - sent resolution",
+                icao_hex.c_str(),
+                msg->icao_hex.c_str());
+        }
+        else {
+            // If a previous RA ended, withdraw our instruction.
+            if (track.advisory == Advisory::RA) {
+                publish_resolution(msg->icao_hex, Resolution::NONE);
+            }
+
+            if (new_advisory == Advisory::COLLISION) {
+                RCLCPP_ERROR(
+                    this->get_logger(),
+                    "TCAS [%s]: COLLISION proximity with %s",
+                    icao_hex.c_str(),
+                    msg->icao_hex.c_str());
+            }
+            else if (new_advisory == Advisory::TA) {
+                RCLCPP_WARN(
+                    this->get_logger(),
+                    "TCAS [%s]: TA - traffic %s approaching",
+                    icao_hex.c_str(),
+                    msg->icao_hex.c_str());
+            }
+            else {
+                RCLCPP_INFO(
+                    this->get_logger(),
+                    "TCAS [%s]: CLEAR of %s",
+                    icao_hex.c_str(),
+                    msg->icao_hex.c_str());
+            }
+        }
+
+        track.advisory = new_advisory;
     }
 
 };
