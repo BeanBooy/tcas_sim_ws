@@ -63,7 +63,7 @@ public:
             std::bind(&UserPlane::broadcast_callback, this, std::placeholders::_1)
         );
         // setup service function for receiving keyboard inputs
-        server_ = this->create_service<interfaces::srv::TeleOp>("send_new_keys/" + icao_hex,
+        server_ = this->create_service<interfaces::srv::TeleOp>("key_cmd/" + icao_hex,
             std::bind(&UserPlane::handle_new_keys, this, std::placeholders::_1, std::placeholders::_2)
         );
         // done :)

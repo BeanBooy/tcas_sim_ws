@@ -38,7 +38,7 @@ PlaneTeleop::PlaneTeleop()
     throw std::invalid_argument("icao_hex must be 6 hexadecimal characters (0-9, A-F)");
   }
 
-  client_ = this->create_client<interfaces::srv::TeleOp>("send_new_keys/" + icao_hex_);
+  client_ = this->create_client<interfaces::srv::TeleOp>("key_cmd/" + icao_hex_);
 
   setup_terminal();
   last_tick_ = Clock::now();
