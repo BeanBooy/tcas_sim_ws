@@ -24,6 +24,7 @@ class AdsbHandler(Node):
         self.plane_pool = {}
         # last known active plane nodes (same as the plane_pool) but as a set for easy diffing
         self.last_active_plane_nodes = set()
+        self.lock = threading.Lock()
         # start listening to tcp port for data
         self.stream_thread = threading.Thread(target=self.stream_flight_data, daemon=True)
         self.stream_thread.start()
@@ -71,15 +72,18 @@ class AdsbHandler(Node):
             # should never be null, but reconform since whole logic builds on the icao hex
             if not icao:
                 return
-            # find or initialize the plane node which handles this flight
-            plane_node = self.get_plane_node_from_icao(icao)
-            if plane_node is None:
-                # assign new flights only on first lat/lon receive
-                if fields[14] == "":
-                    return
-                plane_node = self.assign_flight_to_node(icao)
+            with self.lock:
+                # find or initialize the plane node which handles this flight
+                plane_node = self.get_plane_node_from_icao(icao)
                 if plane_node is None:
-                    return  # no free plane node found... displays error
+                    # assign new flights only on first lat/lon receive
+                    if fields[14] == "":
+                        return
+                    plane_node = self.assign_flight_to_node(icao)
+                    if plane_node is None:
+                        return  # no free plane node found... displays error
+                # setting update time to keep track of flight validy
+                self.plane_pool[plane_node]["last_update"] = time.time()
             # send message
             self.send_adsb_command(plane_node, icao, 
                 float(fields[11]) * 0.3048 if fields[11] != "" else None,  # altitude (ft -> meter)
@@ -112,8 +116,6 @@ class AdsbHandler(Node):
             adsb_msg.vertical_speed_valid = True
         # send new data to plane node
         self.publisher_.publish(adsb_msg)
-        # setting update time to keep track of flight validy
-        self.plane_pool[plane_node]["last_update"] = time.time()
 
     def send_adsb_kill_command(self, plane_node):
         adsb_msg = Adsb()
@@ -125,37 +127,38 @@ class AdsbHandler(Node):
     def plane_discovery_timer_callback(self):
         # unasign plane nodes which haven't received updates in a while (probably because out of range)
         current_time = time.time()
-        for node_name, info in self.plane_pool.items():
-            if info["state"] == "active" and current_time - info["last_update"] > 10.0:  # seconds
-                info["state"] = "free"
-                self.send_adsb_kill_command(node_name)
-                self.get_logger().warn(f"Node {node_name} (flight {info["icao"]}) was released! (hasn't received updates in reasonable abount of time)")
-        # get current plane nodes from ros graph
-        current_plane_nodes = set(
-            name for name in self.get_node_names() 
-            if name.lstrip('/').startswith("s_plane_")
-        )
-        joined_nodes = current_plane_nodes - self.last_active_plane_nodes
-        left_nodes = self.last_active_plane_nodes - current_plane_nodes
-        # handle newly discovered plane nodes
-        for node in joined_nodes:
-            self.plane_pool[node] = { "state": "free" }
-            self.get_logger().info(f"Node joined pool: {node}")
-        # handle crashed/dead plane nodes (need reassigment if holding icao adress)
-        for node in left_nodes:
-            self.get_logger().warn(f"Node crashed/left: {node}")
-            # check if this dead node was tracking a real-world plane
-            if node in self.plane_pool and self.plane_pool[node]["state"] == "active":
-                abandoned_icao = self.plane_pool[node]["icao"]
-                self.get_logger().warn(f"Node {node} connection lost! Reassigning active flight {abandoned_icao}...")
-                # find an free node to rescue this real-world plane
-                new_node = self.assign_flight_to_node(abandoned_icao)
-                if new_node:
-                    self.get_logger().info(f"Successfully rescued flight {abandoned_icao} on new node {new_node}")
-            # remove from master pool dict
-            del self.plane_pool[node]
-        # update history tracker
-        self.last_active_plane_nodes = current_plane_nodes
+        with self.lock:
+            for node_name, info in self.plane_pool.items():
+                if info["state"] == "active" and current_time - info["last_update"] > 10.0:  # seconds
+                    info["state"] = "free"
+                    self.send_adsb_kill_command(node_name)
+                    self.get_logger().warn(f"Node {node_name} (flight {info["icao"]}) was released! (hasn't received updates in reasonable abount of time)")
+            # get current plane nodes from ros graph
+            current_plane_nodes = set(
+                name for name in self.get_node_names() 
+                if name.lstrip('/').startswith("s_plane_")
+            )
+            joined_nodes = current_plane_nodes - self.last_active_plane_nodes
+            left_nodes = self.last_active_plane_nodes - current_plane_nodes
+            # handle newly discovered plane nodes
+            for node in joined_nodes:
+                self.plane_pool[node] = { "state": "free" }
+                self.get_logger().info(f"Node joined pool: {node}")
+            # handle crashed/dead plane nodes (need reassigment if holding icao adress)
+            for node in left_nodes:
+                self.get_logger().warn(f"Node crashed/left: {node}")
+                # check if this dead node was tracking a real-world plane
+                if node in self.plane_pool and self.plane_pool[node]["state"] == "active":
+                    abandoned_icao = self.plane_pool[node]["icao"]
+                    self.get_logger().warn(f"Node {node} connection lost! Reassigning active flight {abandoned_icao}...")
+                    # find an free node to rescue this real-world plane
+                    new_node = self.assign_flight_to_node(abandoned_icao)
+                    if new_node:
+                        self.get_logger().info(f"Successfully rescued flight {abandoned_icao} on new node {new_node}")
+                # remove from master pool dict
+                del self.plane_pool[node]
+            # update history tracker
+            self.last_active_plane_nodes = current_plane_nodes
 
     def assign_flight_to_node(self, icao_code):
         # find the first free node
