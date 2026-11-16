@@ -36,7 +36,7 @@ def generate_launch_description():
 
     arg = DeclareLaunchArgument(
         's_planes',
-        default_value='3',
+        default_value='0',
         description='Amount of static plane nodes.'
     )
     ld.add_action(arg)
