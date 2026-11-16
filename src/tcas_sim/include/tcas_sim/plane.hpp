@@ -46,8 +46,8 @@ public:
   Plane();
 
 protected:
-  rclcpp::TimerBase::SharedPtr timer_;
-  rclcpp::Publisher<interfaces::msg::Pose>::SharedPtr publisher_;
+  rclcpp::TimerBase::SharedPtr broadcast_timer;
+  rclcpp::Publisher<interfaces::msg::Pose>::SharedPtr broadcast_publisher;
   std::string broadcast_topic = "/airspace_broadcast";
   AircraftState aircraft_state{};
   bool is_active;  // for user planes always true, for static planes only if connected to flight
@@ -55,5 +55,5 @@ protected:
 
   virtual aircraft_state_t get_current_pos_state() = 0;
   void broadcast_position(aircraft_state_t& aircraft_state) const;
-  void timer_callback();
+  void broadcast_timer_callback();
 };

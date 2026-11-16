@@ -10,9 +10,13 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/Adsb.msg"
-  "msg/Pose.msg"
+        "msg/Adsb.msg"
+        "msg/Pose.msg"
+        "srv/TeleOp.srv"
+        "msg/Resolution.msg"
   DEPENDENCIES std_msgs
 )
+
+ament_export_dependencies(rosidl_default_runtime)
 
 ament_package()
