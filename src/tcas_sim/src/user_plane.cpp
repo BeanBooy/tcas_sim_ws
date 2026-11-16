@@ -84,6 +84,7 @@ private:
     rclcpp::Subscription<interfaces::msg::Resolution>::SharedPtr resolution_subscription_;
     std::chrono::steady_clock::time_point last_update_{};
     std::chrono::steady_clock::time_point last_command_{};
+    rclcpp::TimerBase::SharedPtr collision_timer_;
     bool has_init_velocity = false;
 
     enum class Advisory { CLEAR, TA, RA, COLLISION };
@@ -339,12 +340,23 @@ private:
             }
 
             if (new_advisory == Advisory::COLLISION) {
-                this->is_active = false;
+                //this->is_active = false;
                 RCLCPP_ERROR(
                     this->get_logger(),
                     "TCAS [%s]: COLLISION proximity with %s",
                     icao_hex.c_str(),
                     msg->icao_hex.c_str());
+                    
+                     if (!collision_timer_) {
+                        collision_timer_ = this->create_wall_timer(
+                            200ms,
+                            [this]() {
+                                this->is_active = false;
+                                collision_timer_->cancel();
+                            }
+                        );
+                    }
+                                       
             }
             else if (new_advisory == Advisory::TA) {
                 RCLCPP_WARN(
